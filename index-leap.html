@@ -7,27 +7,22 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Outfit:wght@300;600;900&display=swap');
-        
         :root { --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
         body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg-gradient); color: #f8fafc; margin: 0; overflow: hidden; height: 100dvh; }
         #app { height: 100dvh; width: 100%; display: flex; flex-direction: column; position: relative; z-index: 10; }
-
         .bg-orb { position: absolute; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); z-index: 1; opacity: 0.3; animation: move 20s infinite alternate; }
         @keyframes move { from { transform: translate(-10%, -10%); } to { transform: translate(20%, 20%); } }
-
         .glass-card { background: rgba(255, 255, 255, 0.07); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 2rem; }
         .btn-primary { background: linear-gradient(135deg, #0ea5e9, #2563eb); color: white; font-weight: bold; box-shadow: 0 10px 20px -5px rgba(14, 165, 233, 0.4); }
         .choice-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); text-align: left; padding: 1.25rem; border-radius: 1.25rem; font-weight: bold; color: white; width: 100%; }
         .ans-correct { background: #10b981 !important; border-color: #10b981 !important; }
         .ans-wrong { background: #ef4444 !important; border-color: #ef4444 !important; }
-
         .rank-S { color: #fbbf24; text-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
         .rank-A { color: #f87171; }
         .rank-B { color: #60a5fa; }
         .rank-C { color: #fbbf24; }
         .rank-D { color: #4ade80; }
         .rank-E { color: #94a3b8; }
-
         .progress-ring__circle { transition: stroke-dashoffset 0.8s ease-in-out; transform: rotate(-90deg); transform-origin: 50% 50%; }
         .produced-by { font-family: 'Outfit', sans-serif; font-size: 0.65rem; letter-spacing: 0.3em; color: rgba(255, 255, 255, 0.2); text-transform: uppercase; }
         .fade-in { animation: fadeIn 0.4s ease-out forwards; }
@@ -44,14 +39,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// --- 更新されたFirebase設定 ---
 const firebaseConfig = {
   apiKey: "AIzaSyCLn0SOd7xvuQ5Zd9IKsR71ugCw96m6Gsw",
   authDomain: "leap-test-9fe0b.firebaseapp.com",
   projectId: "leap-test-9fe0b",
   storageBucket: "leap-test-9fe0b.firebasestorage.app",
   messagingSenderId: "1047056215317",
-  appId: "1:1047056215317:web:b84468b297ae702c040d1c"
+  appId: "1:1047056215317:web:3ec726d8808a8ae0040d1c" // 更新済み
 };
 
 const fbApp = initializeApp(firebaseConfig);
@@ -61,7 +55,6 @@ window.wordData = [
     {id:1, en:"follow", ja:"～に従う"},
     {id:2, en:"consider", ja:"～を考慮する"},
     {id:3, en:"increase", ja:"増える"}
-    // ここに必要な単語データを追加してください
 ];
 
 const ADMIN_PASS = "Henly0402";
@@ -81,11 +74,7 @@ window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = ty
 
 window.adminLogin = () => {
     const p = prompt("ADMIN PASSを入力してください");
-    if (p === ADMIN_PASS) {
-        window.nav('admin');
-    } else if (p !== null) {
-        alert("パスワードが違います");
-    }
+    if (p === ADMIN_PASS) { window.nav('admin'); } else if (p !== null) { alert("パスワードが違います"); }
 };
 
 window.login = () => {
@@ -182,24 +171,12 @@ function render() {
         root.innerHTML = `
             <div class="p-8 flex-1 flex flex-col fade-in">
                 <div class="flex justify-between items-start mb-10">
-                    <div>
-                        <p class="text-[10px] text-sky-400 font-bold uppercase tracking-widest">Authorized Student</p>
-                        <h2 class="text-4xl font-black text-white" style="font-family:'Outfit'">${state.currentUser.id}</h2>
-                    </div>
+                    <div><p class="text-[10px] text-sky-400 font-bold uppercase tracking-widest">Authorized Student</p><h2 class="text-4xl font-black text-white" style="font-family:'Outfit'">${state.currentUser.id}</h2></div>
                 </div>
                 <div class="space-y-4 flex-1">
-                    <button onclick="window.nav('range', 'Basic')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-sky-500">
-                        <span class="block text-[10px] text-sky-400 font-bold mb-1 uppercase tracking-widest">Stage 01</span>
-                        <span class="text-2xl font-black text-white">BASIC</span>
-                    </button>
-                    <button onclick="window.nav('range', 'Standard')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-indigo-500">
-                        <span class="block text-[10px] text-indigo-400 font-bold mb-1 uppercase tracking-widest">Stage 02</span>
-                        <span class="text-2xl font-black text-white">STANDARD</span>
-                    </button>
-                    <button onclick="window.nav('range', 'Master')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-amber-500">
-                        <span class="block text-[10px] text-amber-500 font-bold mb-1 uppercase tracking-widest">Stage 03</span>
-                        <span class="text-2xl font-black text-white">MASTER</span>
-                    </button>
+                    <button onclick="window.nav('range', 'Basic')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-sky-500"><span class="block text-[10px] text-sky-400 font-bold mb-1 uppercase tracking-widest">Stage 01</span><span class="text-2xl font-black text-white">BASIC</span></button>
+                    <button onclick="window.nav('range', 'Standard')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-indigo-500"><span class="block text-[10px] text-indigo-400 font-bold mb-1 uppercase tracking-widest">Stage 02</span><span class="text-2xl font-black text-white">STANDARD</span></button>
+                    <button onclick="window.nav('range', 'Master')" class="w-full py-8 glass-card text-left px-8 relative border-l-4 border-l-amber-500"><span class="block text-[10px] text-amber-500 font-bold mb-1 uppercase tracking-widest">Stage 03</span><span class="text-2xl font-black text-white">MASTER</span></button>
                 </div>
                 <button onclick="location.reload()" class="mt-4 py-2 text-white/20 text-xs font-bold uppercase tracking-widest">Logout</button>
             </div>
@@ -207,33 +184,13 @@ function render() {
     } 
     else if (state.view === 'range') {
         if (state.quizType === 'Master') {
-            const total = 2000;
-            const progress = state.currentUser.progress || 0;
-            const percent = Math.min((progress / total) * 100, 100);
-            const radius = 70; const circum = 2 * Math.PI * radius;
-            const offset = circum - (percent / 100 * circum);
-            root.innerHTML = `
-                <div class="flex-1 flex flex-col items-center justify-center p-8 fade-in">
-                    <div class="relative mb-10 flex items-center justify-center">
-                        <svg width="200" height="200">
-                            <circle class="text-white/5" stroke="currentColor" stroke-width="12" fill="transparent" r="${radius}" cx="100" cy="100"/>
-                            <circle class="progress-ring__circle text-amber-500" stroke="currentColor" stroke-width="12" stroke-linecap="round" fill="transparent" 
-                                    r="${radius}" cx="100" cy="100" style="stroke-dasharray: ${circum} ${circum}; stroke-dashoffset: ${offset}"/>
-                        </svg>
-                        <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
-                            <span class="text-3xl font-black text-white">${progress}</span>
-                            <span class="text-[10px] text-white/30 uppercase font-bold border-t border-white/10 mt-1 pt-1">of ${total} words</span>
-                        </div>
-                    </div>
-                    <button onclick="window.startQuiz(1, 2027)" class="w-full py-6 btn-primary rounded-3xl font-black text-2xl uppercase tracking-widest">Start Test</button>
-                    <button onclick="window.nav('home')" class="mt-8 text-white/30 font-bold uppercase tracking-widest text-xs">Back</button>
-                </div>`;
+            const total = 2000; const progress = state.currentUser.progress || 0; const percent = Math.min((progress / total) * 100, 100);
+            const radius = 70; const circum = 2 * Math.PI * radius; const offset = circum - (percent / 100 * circum);
+            root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-8 fade-in"><div class="relative mb-10 flex items-center justify-center"><svg width="200" height="200"><circle class="text-white/5" stroke="currentColor" stroke-width="12" fill="transparent" r="${radius}" cx="100" cy="100"/><circle class="progress-ring__circle text-amber-500" stroke="currentColor" stroke-width="12" stroke-linecap="round" fill="transparent" r="${radius}" cx="100" cy="100" style="stroke-dasharray: ${circum} ${circum}; stroke-dashoffset: ${offset}"/></svg><div class="absolute inset-0 flex flex-col items-center justify-center text-center"><span class="text-3xl font-black text-white">${progress}</span><span class="text-[10px] text-white/30 uppercase font-bold border-t border-white/10 mt-1 pt-1">of ${total} words</span></div></div><button onclick="window.startQuiz(1, 2027)" class="w-full py-6 btn-primary rounded-3xl font-black text-2xl uppercase tracking-widest">Start Test</button><button onclick="window.nav('home')" class="mt-8 text-white/30 font-bold uppercase tracking-widest text-xs">Back</button></div>`;
         } else {
-            let step = (state.quizType === 'Basic') ? 100 : 400;
-            let btns = "";
+            let step = (state.quizType === 'Basic') ? 100 : 400; let btns = "";
             for (let i = 1; i <= 2000; i += step) {
-                const key = `${state.quizType}_${i}_${i+step-1}`;
-                const best = state.currentUser.bestRanks[key] || { label: '-' };
+                const key = `${state.quizType}_${i}_${i+step-1}`; const best = state.currentUser.bestRanks[key] || { label: '-' };
                 btns += `<button onclick="window.startQuiz(${i}, ${i+step-1})" class="w-full p-6 glass-card flex justify-between items-center"><span class="font-bold text-white/80">${i} — ${i+step-1}</span><span class="text-2xl font-black rank-${best.label}">${best.label}</span></button>`;
             }
             root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-hidden"><h2 class="text-2xl font-black mb-6 text-white uppercase">${state.quizType}</h2><div class="flex-1 space-y-3 overflow-y-auto scrollbar-hide pb-10">${btns}</div><button onclick="window.nav('home')" class="py-4 text-white/30 font-bold text-xs uppercase text-center">Back</button></div>`;
