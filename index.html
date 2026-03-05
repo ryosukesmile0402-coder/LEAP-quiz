@@ -12,11 +12,11 @@
         #app { height: 100dvh; width: 100%; display: flex; flex-direction: column; position: relative; }
         .bg-circle { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, rgba(14, 165, 233, 0) 70%); z-index: -1; }
         
-        /* スプラッシュ画面の修正 */
+        /* スプラッシュ画面 */
         #splash { 
             position: fixed; inset: 0; background: white; 
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            z-index: 9999; transition: opacity 0.6s ease-out; pointer-events: none;
+            z-index: 9999; transition: opacity 0.8s ease-out; pointer-events: none;
         }
         
         .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 1); border-radius: 2.5rem; box-shadow: 0 20px 50px rgba(14, 165, 233, 0.1); }
@@ -24,7 +24,12 @@
         .choice-btn { background: white; border: 2px solid var(--soft-blue); text-align: left; padding: 1.25rem; border-radius: 1.5rem; font-weight: bold; color: #0369a1; width: 100%; }
         .ans-correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
         .ans-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
-        .produced-by { font-family: 'Outfit', sans-serif; font-size: 0.75rem; letter-spacing: 0.4em; color: #94a3b8; text-transform: uppercase; }
+        
+        .produced-by { 
+            font-family: 'Outfit', sans-serif; font-size: 0.75rem; letter-spacing: 0.4em; 
+            color: #94a3b8; text-transform: uppercase; text-align: center;
+        }
+        
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -37,6 +42,7 @@
 
     <div class="bg-circle w-[500px] h-[500px] -top-20 -left-20"></div>
     <div class="bg-circle w-[400px] h-[400px] bottom-0 -right-20"></div>
+
     <div id="app"></div>
 
 <script type="module">
@@ -2059,26 +2065,17 @@ window.wordData = [
 ];
 
 const ADMIN_PASS = "Henly0402";
-let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null, rangeKey: "" };
+let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null };
 const root = document.getElementById('app');
 
 window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
 window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === ADMIN_PASS) window.nav('admin'); };
+
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
-    if (u) { state.currentUser = u; window.nav('home'); } else { alert("Error"); }
-};
-
-window.addUser = async () => {
-    const id = document.getElementById('newID').value;
-    const pw = document.getElementById('newPW').value;
-    if(!id || !pw) return;
-    const newUser = { id, pass: pw, progress: 0, bestRanks: {} };
-    await setDoc(doc(db, "users", id), newUser);
-    state.users.push(newUser);
-    render();
+    if (u) { state.currentUser = u; window.nav('home'); } else { alert("IDまたはPasswordが違います"); }
 };
 
 window.startQuiz = (min, max) => {
@@ -2122,28 +2119,36 @@ window.checkAns = async (idx) => {
 };
 
 function render() {
+    const footer = `<p class="produced-by py-6">Produced by Henly</p>`;
+
     if (state.view === 'login') {
-        root.innerHTML = `<div class="flex-1 flex flex-col justify-center p-8 fade-in">
-            <div class="glass-card p-10 text-center">
-                <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase">Admin Access</button>
-                <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
-                <div class="space-y-4">
-                    <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
-                    <input id="uPW" type="password" placeholder="PASS" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
-                    <button onclick="window.login()" class="w-full py-4 btn-primary rounded-2xl font-black">LOGIN</button>
+        root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="glass-card p-10 text-center">
+                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase">Admin Access</button>
+                    <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
+                    <div class="space-y-4">
+                        <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
+                        <input id="uPW" type="password" placeholder="PASS" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
+                        <button onclick="window.login()" class="w-full py-4 btn-primary rounded-2xl font-black">LOGIN</button>
+                    </div>
                 </div>
             </div>
+            ${footer}
         </div>`;
     } 
     else if (state.view === 'home') {
-        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in">
-            <h2 class="text-3xl font-black text-slate-700 text-center mb-10">${state.currentUser.id}</h2>
-            <div class="space-y-4">
-                <button onclick="window.nav('range', 'Basic')" class="w-full py-6 glass-card border-b-4 border-sky-400 font-bold">BASIC</button>
-                <button onclick="window.nav('range', 'Standard')" class="w-full py-6 glass-card border-b-4 border-blue-400 font-bold">STANDARD</button>
-                <button onclick="window.nav('range', 'Master')" class="w-full py-6 glass-card border-b-4 border-amber-400 font-bold">MASTER</button>
+        root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
+            <div class="flex-1 flex flex-col pt-10">
+                <h2 class="text-3xl font-black text-slate-700 text-center mb-10">${state.currentUser.id}</h2>
+                <div class="space-y-4">
+                    <button onclick="window.nav('range', 'Basic')" class="w-full py-6 glass-card border-b-4 border-sky-400 font-bold">BASIC</button>
+                    <button onclick="window.nav('range', 'Standard')" class="w-full py-6 glass-card border-b-4 border-blue-400 font-bold">STANDARD</button>
+                    <button onclick="window.nav('range', 'Master')" class="w-full py-6 glass-card border-b-4 border-amber-400 font-bold">MASTER</button>
+                </div>
+                <button onclick="location.reload()" class="mt-10 text-slate-300 text-xs font-bold uppercase text-center">Logout</button>
             </div>
-            <button onclick="location.reload()" class="mt-10 text-slate-300 text-xs font-bold uppercase text-center">Logout</button>
+            ${footer}
         </div>`;
     } 
     else if (state.view === 'range') {
@@ -2183,44 +2188,32 @@ function render() {
             </div>
         </div>`;
     }
-    else if (state.view === 'admin') {
-        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto">
-            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin</h2>
-            <div class="glass-card p-6 mb-6 space-y-4">
-                <input id="newID" type="text" placeholder="ID" class="w-full p-3 bg-sky-50 rounded-xl">
-                <input id="newPW" type="text" placeholder="PASS" class="w-full p-3 bg-sky-50 rounded-xl">
-                <button onclick="window.addUser()" class="w-full py-3 btn-primary rounded-xl font-bold">ADD</button>
-            </div>
-            <div class="space-y-2">${state.users.map(u => `<div class="p-4 glass-card flex justify-between"><span>${u.id}</span><span>${u.progress || 0}pt</span></div>`).join('')}</div>
-            <button onclick="window.nav('login')" class="py-6 text-sky-400 font-bold text-center">EXIT</button>
-        </div>`;
-    }
 }
 
-// 起動処理（スプラッシュ強制解除付き）
+// 起動処理
 const startApp = () => {
     const splash = document.getElementById('splash');
     if(splash) {
         splash.style.opacity = '0';
-        setTimeout(() => splash.remove(), 600);
+        setTimeout(() => splash.remove(), 800);
     }
     render();
 };
 
 (async () => {
-    // 3秒経ってもFirebaseが反応しない場合は強制的にログイン画面へ
-    const timeout = setTimeout(startApp, 3000);
-
+    const startTime = Date.now();
     try {
         const snap = await getDocs(collection(db, "users"));
         state.users = snap.docs.map(d => d.data());
-        clearTimeout(timeout);
-        startApp();
     } catch (e) {
         console.error("Firebase Error:", e);
-        clearTimeout(timeout);
-        startApp();
     }
+
+    // 読み込みが早くても、開始から3秒（3000ms）経過するまで待機
+    const elapsedTime = Date.now() - startTime;
+    const remainingTime = Math.max(0, 3000 - elapsedTime);
+
+    setTimeout(startApp, remainingTime);
 })();
 </script>
 </body>
