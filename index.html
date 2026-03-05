@@ -53,7 +53,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 window.wordData = [
-   {id:1, en:"agree", ja:"賛成する"},
+ {id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2053,6 +2053,7 @@ window.wordData = [
 {id:1998, en:"namely", ja:"すなわち"},
 {id:1999, en:"allegedly", ja:"伝えられるところによると"},
 {id:2000, en:"whereas", ja:"～だが一方"},
+];
 
 const ADMIN_PASS = "Henly0402";
 let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null, rangeKey: "" };
