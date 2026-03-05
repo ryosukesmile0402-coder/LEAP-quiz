@@ -7,20 +7,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Outfit:wght@300;600;900&display=swap');
-        
-        :root {
-            --primary-blue: #0ea5e9;
-            --soft-blue: #e0f2fe;
-            --bg-light: #f0f9ff;
-        }
-
+        :root { --primary-blue: #0ea5e9; --soft-blue: #e0f2fe; --bg-light: #f0f9ff; }
         body { font-family: 'Noto Sans JP', sans-serif; background-color: var(--bg-light); color: #334155; margin: 0; overflow: hidden; height: 100dvh; }
         #app { height: 100dvh; width: 100%; display: flex; flex-direction: column; position: relative; }
-
         .bg-circle { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, rgba(14, 165, 233, 0) 70%); z-index: -1; }
-        #splash { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify: center; z-index: 100; transition: opacity 0.8s ease-out; display: flex; align-items: center; justify-content: center; }
+        
+        /* スプラッシュ画面の修正 */
+        #splash { 
+            position: fixed; inset: 0; background: white; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 9999; transition: opacity 0.6s ease-out; pointer-events: none;
+        }
+        
         .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 1); border-radius: 2.5rem; box-shadow: 0 20px 50px rgba(14, 165, 233, 0.1); }
-        .btn-primary { background: linear-gradient(135deg, #0ea5e9, #38bdf8); color: white; font-weight: bold; box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3); }
+        .btn-primary { background: linear-gradient(135deg, #0ea5e9, #38bdf8); color: white; font-weight: bold; }
         .choice-btn { background: white; border: 2px solid var(--soft-blue); text-align: left; padding: 1.25rem; border-radius: 1.5rem; font-weight: bold; color: #0369a1; width: 100%; }
         .ans-correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
         .ans-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
@@ -31,10 +31,13 @@
     </style>
 </head>
 <body>
-    <div id="splash"><p class="produced-by animate-pulse">Produced by Henly</p></div>
+    <div id="splash">
+        <p class="produced-by animate-pulse">Produced by Henly</p>
+    </div>
+
     <div class="bg-circle w-[500px] h-[500px] -top-20 -left-20"></div>
     <div class="bg-circle w-[400px] h-[400px] bottom-0 -right-20"></div>
-    <div id="app" class="max-w-md mx-auto"></div>
+    <div id="app"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -53,7 +56,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 window.wordData = [
- {id:1, en:"agree", ja:"賛成する"},
+   {id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2060,28 +2063,21 @@ let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType:
 const root = document.getElementById('app');
 
 window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
-
-window.adminLogin = () => {
-    const p = prompt("ADMIN PASSを入力してください");
-    if (p === ADMIN_PASS) { window.nav('admin'); }
-};
-
+window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === ADMIN_PASS) window.nav('admin'); };
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
-    if (u) { state.currentUser = u; window.nav('home'); }
-    else { alert("IDまたはPasswordが正しくありません"); }
+    if (u) { state.currentUser = u; window.nav('home'); } else { alert("Error"); }
 };
 
 window.addUser = async () => {
     const id = document.getElementById('newID').value;
     const pw = document.getElementById('newPW').value;
-    if(!id || !pw) return alert("入力してください");
+    if(!id || !pw) return;
     const newUser = { id, pass: pw, progress: 0, bestRanks: {} };
     await setDoc(doc(db, "users", id), newUser);
     state.users.push(newUser);
-    alert("追加完了");
     render();
 };
 
@@ -2108,7 +2104,7 @@ window.checkAns = async (idx) => {
     const ok = (q.opts[idx] === q.ja);
     if (ok) {
         state.quiz.score++;
-        if (state.quizType === 'Master') {
+        if (state.quizType === 'Master' && state.currentUser) {
             state.currentUser.progress = (state.currentUser.progress || 0) + 1;
             await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
         }
@@ -2127,37 +2123,35 @@ window.checkAns = async (idx) => {
 
 function render() {
     if (state.view === 'login') {
-        root.innerHTML = `
-            <div class="flex-1 flex flex-col justify-center p-8 fade-in">
-                <div class="glass-card p-10 text-center relative">
-                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold tracking-widest uppercase">Admin Access</button>
-                    <h1 class="text-5xl font-black text-sky-500 mb-2 italic" style="font-family:'Outfit'">LEAP</h1>
-                    <div class="space-y-4">
-                        <input id="uID" type="text" placeholder="USER ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
-                        <input id="uPW" type="password" placeholder="PASSWORD" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
-                        <button onclick="window.login()" class="w-full py-4 btn-primary rounded-2xl text-lg font-black">LOGIN</button>
-                    </div>
+        root.innerHTML = `<div class="flex-1 flex flex-col justify-center p-8 fade-in">
+            <div class="glass-card p-10 text-center">
+                <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase">Admin Access</button>
+                <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
+                <div class="space-y-4">
+                    <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
+                    <input id="uPW" type="password" placeholder="PASS" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
+                    <button onclick="window.login()" class="w-full py-4 btn-primary rounded-2xl font-black">LOGIN</button>
                 </div>
-            </div>`;
+            </div>
+        </div>`;
     } 
     else if (state.view === 'home') {
-        root.innerHTML = `
-            <div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto scrollbar-hide">
-                <div class="mb-10 text-center"><h2 class="text-3xl font-black text-slate-700">${state.currentUser.id}</h2></div>
-                <div class="space-y-4">
-                    <button onclick="window.nav('range', 'Basic')" class="w-full py-6 glass-card text-center border-b-4 border-sky-400 font-bold">BASIC</button>
-                    <button onclick="window.nav('range', 'Standard')" class="w-full py-6 glass-card text-center border-b-4 border-blue-400 font-bold">STANDARD</button>
-                    <button onclick="window.nav('range', 'Master')" class="w-full py-6 glass-card text-center border-b-4 border-amber-400 font-bold">MASTER</button>
-                </div>
-                <button onclick="location.reload()" class="mt-10 text-slate-300 text-xs font-bold uppercase">Logout</button>
-            </div>`;
+        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in">
+            <h2 class="text-3xl font-black text-slate-700 text-center mb-10">${state.currentUser.id}</h2>
+            <div class="space-y-4">
+                <button onclick="window.nav('range', 'Basic')" class="w-full py-6 glass-card border-b-4 border-sky-400 font-bold">BASIC</button>
+                <button onclick="window.nav('range', 'Standard')" class="w-full py-6 glass-card border-b-4 border-blue-400 font-bold">STANDARD</button>
+                <button onclick="window.nav('range', 'Master')" class="w-full py-6 glass-card border-b-4 border-amber-400 font-bold">MASTER</button>
+            </div>
+            <button onclick="location.reload()" class="mt-10 text-slate-300 text-xs font-bold uppercase text-center">Logout</button>
+        </div>`;
     } 
     else if (state.view === 'range') {
         if(state.quizType === 'Master'){
-            root.innerHTML = `<div class="p-8 flex-1 flex flex-col items-center justify-center fade-in">
-                <h2 class="text-4xl font-black text-amber-500 mb-8 italic">MASTER MODE</h2>
-                <p class="text-slate-500 mb-10 text-center">全単語からランダムに20問出題されます。<br>正解するごとにProgressが上昇します。</p>
-                <button onclick="window.startQuiz(1, 2000)" class="w-full py-6 btn-primary rounded-3xl text-2xl font-black">TEST START</button>
+            root.innerHTML = `<div class="p-8 flex-1 flex flex-col items-center justify-center fade-in text-center">
+                <h2 class="text-4xl font-black text-amber-500 mb-4 italic">MASTER</h2>
+                <p class="text-slate-400 mb-10">ランダムに20問出題</p>
+                <button onclick="window.startQuiz(1, 2000)" class="w-full py-6 btn-primary rounded-3xl font-black text-xl">START</button>
                 <button onclick="window.nav('home')" class="mt-8 text-sky-400 font-bold">BACK</button>
             </div>`;
         } else {
@@ -2167,21 +2161,17 @@ function render() {
                 btns += `<button onclick="window.startQuiz(${i}, ${i+step-1})" class="w-full p-6 glass-card mb-4 font-bold text-slate-600">${i} — ${i+step-1}</button>`;
             }
             root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-hidden">
-                <h2 class="text-2xl font-black mb-6 text-slate-700">${state.quizType}</h2>
+                <h2 class="text-2xl font-black mb-6 text-slate-700 uppercase">${state.quizType}</h2>
                 <div class="flex-1 overflow-y-auto scrollbar-hide">${btns}</div>
-                <button onclick="window.nav('home')" class="py-6 text-sky-400 font-bold">BACK</button>
+                <button onclick="window.nav('home')" class="py-6 text-sky-400 font-bold text-center">BACK</button>
             </div>`;
         }
     } 
     else if (state.view === 'quiz') {
         const q = state.quiz.questions[state.quiz.curr];
         root.innerHTML = `<div class="flex-1 flex flex-col p-6 fade-in">
-            <div class="w-full h-2 bg-sky-100 rounded-full mt-4 overflow-hidden">
-                <div class="h-full bg-sky-400 transition-all" style="width:${((state.quiz.curr+1)/state.quiz.questions.length)*100}%"></div>
-            </div>
-            <div class="flex-1 flex flex-col justify-center items-center text-center">
-                <h2 class="text-5xl font-black text-slate-700">${q.en}</h2>
-            </div>
+            <div class="w-full h-2 bg-sky-100 rounded-full mt-4 overflow-hidden"><div class="h-full bg-sky-400" style="width:${((state.quiz.curr+1)/state.quiz.questions.length)*100}%"></div></div>
+            <div class="flex-1 flex flex-col justify-center items-center text-center"><h2 class="text-5xl font-black text-slate-700">${q.en}</h2></div>
             <div class="grid gap-3 mb-10">${q.opts.map((o, i) => `<button onclick="window.checkAns(${i})" class="choice-btn">${o}</button>`).join('')}</div>
         </div>`;
     } 
@@ -2195,31 +2185,42 @@ function render() {
     }
     else if (state.view === 'admin') {
         root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto">
-            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Panel</h2>
+            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin</h2>
             <div class="glass-card p-6 mb-6 space-y-4">
-                <input id="newID" type="text" placeholder="New ID" class="w-full p-3 bg-sky-50 rounded-xl">
-                <input id="newPW" type="text" placeholder="New Pass" class="w-full p-3 bg-sky-50 rounded-xl">
-                <button onclick="window.addUser()" class="w-full py-3 btn-primary rounded-xl font-bold">Add User</button>
+                <input id="newID" type="text" placeholder="ID" class="w-full p-3 bg-sky-50 rounded-xl">
+                <input id="newPW" type="text" placeholder="PASS" class="w-full p-3 bg-sky-50 rounded-xl">
+                <button onclick="window.addUser()" class="w-full py-3 btn-primary rounded-xl font-bold">ADD</button>
             </div>
-            <div class="space-y-2">${state.users.map(u => `<div class="p-4 glass-card flex justify-between"><span>${u.id}</span><span class="font-bold text-sky-500">${u.progress || 0}pt</span></div>`).join('')}</div>
-            <button onclick="window.nav('login')" class="py-6 text-sky-400 font-bold">EXIT</button>
+            <div class="space-y-2">${state.users.map(u => `<div class="p-4 glass-card flex justify-between"><span>${u.id}</span><span>${u.progress || 0}pt</span></div>`).join('')}</div>
+            <button onclick="window.nav('login')" class="py-6 text-sky-400 font-bold text-center">EXIT</button>
         </div>`;
     }
 }
 
+// 起動処理（スプラッシュ強制解除付き）
+const startApp = () => {
+    const splash = document.getElementById('splash');
+    if(splash) {
+        splash.style.opacity = '0';
+        setTimeout(() => splash.remove(), 600);
+    }
+    render();
+};
+
 (async () => {
+    // 3秒経ってもFirebaseが反応しない場合は強制的にログイン画面へ
+    const timeout = setTimeout(startApp, 3000);
+
     try {
         const snap = await getDocs(collection(db, "users"));
         state.users = snap.docs.map(d => d.data());
-    } catch (e) { console.error(e); }
-    setTimeout(() => {
-        const splash = document.getElementById('splash');
-        if(splash){
-            splash.style.opacity = '0';
-            setTimeout(() => splash.remove(), 800);
-        }
-        render();
-    }, 1500);
+        clearTimeout(timeout);
+        startApp();
+    } catch (e) {
+        console.error("Firebase Error:", e);
+        clearTimeout(timeout);
+        startApp();
+    }
 })();
 </script>
 </body>
