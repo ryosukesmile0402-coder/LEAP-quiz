@@ -18,7 +18,6 @@
         .ans-correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
         .ans-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
         
-        /* ランク用スタイル */
         .rank-S { color: #f59e0b; } .rank-A { color: #ef4444; } .rank-B { color: #3b82f6; } .rank-C { color: #10b981; } .rank-D { color: #64748b; }
         .rank-badge { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.25rem; }
 
@@ -52,7 +51,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 window.wordData = [
-    {id:1, en:"agree", ja:"賛成する"},
+{id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2057,16 +2056,27 @@ window.wordData = [
 let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null, rangeKey: "" };
 const root = document.getElementById('app');
 
-const getRankData = (score) => {
-    if (score >= 20) return { label: 'S', class: 'rank-S', order: 5 };
-    if (score >= 18) return { label: 'A', class: 'rank-A', order: 4 };
-    if (score >= 15) return { label: 'B', class: 'rank-B', order: 3 };
-    if (score >= 10) return { label: 'C', class: 'rank-C', order: 2 };
-    return { label: 'D', class: 'rank-D', order: 1 };
+const getRankLabel = (score) => {
+    if (score >= 20) return 'S';
+    if (score >= 18) return 'A';
+    if (score >= 15) return 'B';
+    if (score >= 10) return 'C';
+    return 'D';
 };
 
 const getRankClass = (label) => {
-    return label === 'S' ? 'rank-S' : label === 'A' ? 'rank-A' : label === 'B' ? 'rank-B' : label === 'C' ? 'rank-C' : 'rank-D';
+    switch(label) {
+        case 'S': return 'rank-S';
+        case 'A': return 'rank-A';
+        case 'B': return 'rank-B';
+        case 'C': return 'rank-C';
+        default: return 'rank-D';
+    }
+};
+
+const getRankOrder = (label) => {
+    const orders = { 'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, '-': 0 };
+    return orders[label] || 0;
 };
 
 window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
@@ -2126,14 +2136,12 @@ window.checkAns = async (idx) => {
 
 const finalizeQuiz = async () => {
     if (state.quizType !== 'Master' && state.currentUser) {
-        const currentRank = getRankData(state.quiz.score);
+        const currentLabel = getRankLabel(state.quiz.score);
         if (!state.currentUser.bestRanks) state.currentUser.bestRanks = {};
         
-        const prevRankLabel = state.currentUser.bestRanks[state.rangeKey] || 'D';
-        const prevRankOrder = getRankData(prevRankLabel === 'S' ? 20 : prevRankLabel === 'A' ? 18 : prevRankLabel === 'B' ? 15 : prevRankLabel === 'C' ? 10 : 0).order;
-
-        if (currentRank.order > prevRankOrder) {
-            state.currentUser.bestRanks[state.rangeKey] = currentRank.label;
+        const prevLabel = state.currentUser.bestRanks[state.rangeKey] || '-';
+        if (getRankOrder(currentLabel) > getRankOrder(prevLabel)) {
+            state.currentUser.bestRanks[state.rangeKey] = currentLabel;
             await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
         }
     }
@@ -2162,7 +2170,7 @@ function render() {
     else if (state.view === 'home') {
         root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
             <div class="flex-1 flex flex-col pt-10">
-                <h2 class="text-3xl font-black text-slate-700 text-center mb-10">${state.currentUser.id}</h2>
+                <h2 class="text-3xl font-black text-slate-700 text-center mb-10 tracking-tight">${state.currentUser.id}</h2>
                 <div class="space-y-4">
                     <button onclick="window.nav('range', 'Basic')" class="w-full py-6 glass-card border-b-4 border-sky-400 font-bold text-slate-600">BASIC</button>
                     <button onclick="window.nav('range', 'Standard')" class="w-full py-6 glass-card border-b-4 border-blue-400 font-bold text-slate-600">STANDARD</button>
@@ -2193,13 +2201,12 @@ function render() {
             let step = (state.quizType === 'Basic') ? 100 : 400;
             for (let i = 1; i <= 2000; i += step) {
                 const key = `${state.quizType}_${i}_${i+step-1}`;
-                const best = (state.currentUser.bestRanks && state.currentUser.bestRanks[key]) ? state.currentUser.bestRanks[key] : '-';
-                const rClass = getRankClass(best);
+                const bestLabel = (state.currentUser.bestRanks && state.currentUser.bestRanks[key]) ? state.currentUser.bestRanks[key] : '-';
                 
                 btns += `
                 <button onclick="window.startQuiz(${i}, ${i+step-1})" class="w-full p-5 glass-card mb-4 flex justify-between items-center border-l-4 border-sky-300 px-6">
                     <span class="font-bold text-slate-600">${i} — ${i+step-1}</span>
-                    <span class="rank-badge ${rClass}">${best}</span>
+                    <span class="rank-badge ${getRankClass(bestLabel)}">${bestLabel}</span>
                 </button>`;
             }
             root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-hidden"><h2 class="text-2xl font-black mb-6 text-slate-700 uppercase tracking-widest">${state.quizType}</h2><div class="flex-1 overflow-y-auto scrollbar-hide">${btns}</div><button onclick="window.nav('home')" class="py-6 text-sky-400 font-bold text-center">BACK</button></div>`;
@@ -2214,15 +2221,32 @@ function render() {
         </div>`;
     } 
     else if (state.view === 'result') {
-        const rank = getRankData(state.quiz.score);
+        const label = getRankLabel(state.quiz.score);
         root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-8 fade-in text-center">
             <div class="glass-card w-full py-12 px-6">
                 <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-4">Quiz Result</div>
-                <div class="text-9xl font-black ${rank.class} mb-2 leading-none" style="font-family:'Outfit'">${rank.label}</div>
+                <div class="text-9xl font-black ${getRankClass(label)} mb-2 leading-none" style="font-family:'Outfit'">${label}</div>
                 <div class="text-2xl font-bold text-slate-500 mb-10">${state.quiz.score} / 20</div>
                 <button onclick="window.nav('home')" class="w-full py-4 btn-primary rounded-2xl font-black tracking-widest uppercase">Continue</button>
             </div>
             ${footer}
+        </div>`;
+    }
+    else if (state.view === 'admin') {
+        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto bg-white">
+            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Control</h2>
+            <div class="space-y-4">
+                ${state.users.sort((a,b) => (b.progress||0)-(a.progress||0)).map(u => `
+                    <div class="p-4 border border-slate-100 rounded-2xl flex justify-between items-center shadow-sm">
+                        <div>
+                            <div class="font-black text-slate-700">${u.id}</div>
+                            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Master: ${u.progress || 0} words</div>
+                        </div>
+                        <div class="text-sky-500 font-black text-xl">${u.progress || 0}pt</div>
+                    </div>
+                `).join('')}
+            </div>
+            <button onclick="window.nav('login')" class="py-10 text-sky-400 font-bold text-center w-full">EXIT ADMIN</button>
         </div>`;
     }
 }
