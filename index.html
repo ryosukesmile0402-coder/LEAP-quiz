@@ -51,7 +51,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 window.wordData = [
-{id:1, en:"agree", ja:"賛成する"},
+   {id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2089,6 +2089,38 @@ window.login = () => {
     if (u) { state.currentUser = u; window.nav('home'); } else { alert("ID/PW Error"); }
 };
 
+// 管理者用：新規ユーザー追加
+window.addNewUser = async () => {
+    const newId = document.getElementById('newID').value.trim();
+    const newPw = document.getElementById('newPW').value.trim();
+    
+    if (!newId || !newPw) {
+        alert("IDとパスワードを入力してください");
+        return;
+    }
+    
+    if (state.users.some(u => u.id === newId)) {
+        alert("そのIDは既に存在します");
+        return;
+    }
+
+    const newUser = {
+        id: newId,
+        pass: newPw,
+        progress: 0,
+        bestRanks: {}
+    };
+
+    try {
+        await setDoc(doc(db, "users", newId), newUser);
+        state.users.push(newUser);
+        alert(`ユーザー ${newId} を作成しました`);
+        render();
+    } catch (e) {
+        alert("エラーが発生しました: " + e.message);
+    }
+};
+
 window.startQuiz = (min, max) => {
     state.rangeKey = `${state.quizType}_${min}_${max}`;
     const pool = window.wordData.filter(w => w.id >= min && w.id <= max);
@@ -2155,7 +2187,7 @@ function render() {
         root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
             <div class="flex-1 flex flex-col justify-center">
                 <div class="glass-card p-10 text-center">
-                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin</button>
+                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin Access</button>
                     <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
                     <div class="space-y-4">
                         <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
@@ -2234,19 +2266,33 @@ function render() {
     }
     else if (state.view === 'admin') {
         root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto bg-white">
-            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Control</h2>
-            <div class="space-y-4">
+            <h2 class="text-3xl font-black mb-6 text-sky-600 italic" style="font-family:'Outfit'">Admin Panel</h2>
+            
+            <div class="glass-card p-6 mb-8 border-2 border-sky-100 shadow-none">
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Add New User</h3>
+                <div class="space-y-3">
+                    <input id="newID" type="text" placeholder="New ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none focus:ring-2 ring-sky-300">
+                    <input id="newPW" type="text" placeholder="New Password" class="w-full p-4 bg-sky-50 rounded-2xl outline-none focus:ring-2 ring-sky-300">
+                    <button onclick="window.addNewUser()" class="w-full py-4 btn-primary rounded-2xl font-bold shadow-lg shadow-sky-100">CREATE USER</button>
+                </div>
+            </div>
+
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 px-2">User Progress List</h3>
+            <div class="space-y-3">
                 ${state.users.sort((a,b) => (b.progress||0)-(a.progress||0)).map(u => `
-                    <div class="p-4 border border-slate-100 rounded-2xl flex justify-between items-center shadow-sm">
+                    <div class="p-5 glass-card flex justify-between items-center shadow-none border border-slate-100">
                         <div>
-                            <div class="font-black text-slate-700">${u.id}</div>
-                            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Master: ${u.progress || 0} words</div>
+                            <div class="font-black text-slate-700 text-lg">${u.id}</div>
+                            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Pass: ${u.pass}</div>
                         </div>
-                        <div class="text-sky-500 font-black text-xl">${u.progress || 0}pt</div>
+                        <div class="text-right">
+                            <div class="text-sky-500 font-black text-2xl">${u.progress || 0}</div>
+                            <div class="text-[9px] text-slate-300 font-bold uppercase">Words</div>
+                        </div>
                     </div>
                 `).join('')}
             </div>
-            <button onclick="window.nav('login')" class="py-10 text-sky-400 font-bold text-center w-full">EXIT ADMIN</button>
+            <button onclick="window.nav('login')" class="py-10 text-slate-300 font-bold text-center w-full uppercase text-xs tracking-[0.3em]">Exit Admin Mode</button>
         </div>`;
     }
 }
