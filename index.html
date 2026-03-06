@@ -11,23 +11,13 @@
         body { font-family: 'Noto Sans JP', sans-serif; background-color: var(--bg-light); color: #334155; margin: 0; overflow: hidden; height: 100dvh; }
         #app { height: 100dvh; width: 100%; display: flex; flex-direction: column; position: relative; }
         .bg-circle { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, rgba(14, 165, 233, 0) 70%); z-index: -1; }
-        
         #splash { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.8s ease-out; pointer-events: none; }
         .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 1); border-radius: 2.5rem; box-shadow: 0 20px 50px rgba(14, 165, 233, 0.1); }
         .btn-primary { background: linear-gradient(135deg, #0ea5e9, #38bdf8); color: white; font-weight: bold; }
         .choice-btn { background: white; border: 2px solid var(--soft-blue); text-align: left; padding: 1.25rem; border-radius: 1.5rem; font-weight: bold; color: #0369a1; width: 100%; transition: all 0.2s; }
-        
-        /* 判定カラー */
         .ans-correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
         .ans-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
-        
-        /* ランク用カラー */
-        .rank-S { color: #f59e0b; text-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
-        .rank-A { color: #ef4444; }
-        .rank-B { color: #3b82f6; }
-        .rank-C { color: #10b981; }
-        .rank-D { color: #64748b; }
-
+        .rank-S { color: #f59e0b; } .rank-A { color: #ef4444; } .rank-B { color: #3b82f6; } .rank-C { color: #10b981; } .rank-D { color: #64748b; }
         .produced-by { font-family: 'Outfit', sans-serif; font-size: 0.75rem; letter-spacing: 0.4em; color: #94a3b8; text-transform: uppercase; text-align: center; }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -42,7 +32,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCLn0SOd7xvuQ5Zd9IKsR71ugCw96m6Gsw",
@@ -56,8 +46,9 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
+const ADMIN_PASS = "Henly0402"; // 管理者パスワード
 window.wordData = [
-   {id:1, en:"agree", ja:"賛成する"},
+{id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2062,23 +2053,38 @@ window.wordData = [
 let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null };
 const root = document.getElementById('app');
 
-// ランク判定ロジック
-const getRank = (score) => {
-    if (score >= 20) return { label: 'S', class: 'rank-S' };
-    if (score >= 18) return { label: 'A', class: 'rank-A' };
-    if (score >= 15) return { label: 'B', class: 'rank-B' };
-    if (score >= 10) return { label: 'C', class: 'rank-C' };
-    return { label: 'D', class: 'rank-D' };
+window.nav = (v, type = null) => { 
+    state.view = v; 
+    if (type) state.quizType = type; 
+    render(); 
 };
 
-window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
-window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === "Henly0402") window.nav('admin'); };
+// 管理者ログイン
+window.adminLogin = () => {
+    const p = prompt("ADMIN PASSを入力してください");
+    if (p === ADMIN_PASS) {
+        window.nav('admin');
+    } else if (p !== null) {
+        alert("パスワードが正しくありません");
+    }
+};
 
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
-    if (u) { state.currentUser = u; window.nav('home'); } else { alert("ID/PW Error"); }
+    if (u) { state.currentUser = u; window.nav('home'); } else { alert("IDまたはPasswordが違います"); }
+};
+
+window.addUser = async () => {
+    const id = document.getElementById('newID').value;
+    const pw = document.getElementById('newPW').value;
+    if(!id || !pw) return alert("空欄があります");
+    const newUser = { id, pass: pw, progress: 0 };
+    await setDoc(doc(db, "users", id), newUser);
+    state.users.push(newUser);
+    alert("ユーザーを追加しました");
+    render();
 };
 
 window.startQuiz = (min, max) => {
@@ -2132,7 +2138,7 @@ function render() {
         root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
             <div class="flex-1 flex flex-col justify-center">
                 <div class="glass-card p-10 text-center">
-                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin</button>
+                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin Access</button>
                     <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
                     <div class="space-y-4">
                         <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
@@ -2191,19 +2197,39 @@ function render() {
         </div>`;
     } 
     else if (state.view === 'result') {
-        const rank = getRank(state.quiz.score);
+        const score = state.quiz.score;
+        let rankLabel = 'D', rankClass = 'rank-D';
+        if (score >= 20) { rankLabel = 'S'; rankClass = 'rank-S'; }
+        else if (score >= 18) { rankLabel = 'A'; rankClass = 'rank-A'; }
+        else if (score >= 15) { rankLabel = 'B'; rankClass = 'rank-B'; }
+        else if (score >= 10) { rankLabel = 'C'; rankClass = 'rank-C'; }
+
         root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-8 fade-in text-center">
             <div class="glass-card w-full py-12 px-6">
                 <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-4">Quiz Result</div>
-                <div class="text-9xl font-black ${rank.class} mb-2 leading-none" style="font-family:'Outfit'">${rank.label}</div>
-                <div class="text-2xl font-bold text-slate-500 mb-10">${state.quiz.score} / ${state.quiz.questions.length}</div>
+                <div class="text-9xl font-black ${rankClass} mb-2 leading-none" style="font-family:'Outfit'">${rankLabel}</div>
+                <div class="text-2xl font-bold text-slate-500 mb-10">${score} / 20</div>
                 <button onclick="window.nav('home')" class="w-full py-4 btn-primary rounded-2xl font-black tracking-widest uppercase">Continue</button>
             </div>
             ${footer}
         </div>`;
     }
     else if (state.view === 'admin') {
-        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto"><h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Panel</h2><div class="space-y-2">${state.users.map(u => `<div class="p-4 glass-card flex justify-between"><span>${u.id}</span><span class="font-bold text-sky-500">${u.progress || 0}pt</span></div>`).join('')}</div><button onclick="window.nav('login')" class="py-6 text-sky-400 font-bold">EXIT</button></div>`;
+        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Panel</h2>
+            <div class="glass-card p-6 mb-6 space-y-4">
+                <input id="newID" type="text" placeholder="New ID" class="w-full p-3 bg-sky-50 rounded-xl outline-none">
+                <input id="newPW" type="text" placeholder="New Pass" class="w-full p-3 bg-sky-50 rounded-xl outline-none">
+                <button onclick="window.addUser()" class="w-full py-3 btn-primary rounded-xl font-bold">Add User</button>
+            </div>
+            <div class="space-y-2">
+                ${state.users.map(u => `<div class="p-4 glass-card flex justify-between items-center text-sm">
+                    <span class="font-bold">${u.id}</span>
+                    <span class="text-sky-500">${u.progress || 0} words</span>
+                </div>`).join('')}
+            </div>
+            <button onclick="window.nav('login')" class="py-10 text-sky-400 font-bold text-center w-full">EXIT</button>
+        </div>`;
     }
 }
 
