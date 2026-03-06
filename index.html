@@ -17,11 +17,16 @@
         .choice-btn { background: white; border: 2px solid var(--soft-blue); text-align: left; padding: 1.25rem; border-radius: 1.5rem; font-weight: bold; color: #0369a1; width: 100%; transition: all 0.2s; }
         .ans-correct { background: #dcfce7 !important; border-color: #22c55e !important; color: #166534 !important; }
         .ans-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
+        
+        /* ランク用スタイル */
         .rank-S { color: #f59e0b; } .rank-A { color: #ef4444; } .rank-B { color: #3b82f6; } .rank-C { color: #10b981; } .rank-D { color: #64748b; }
+        .rank-badge { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.25rem; }
+
         .produced-by { font-family: 'Outfit', sans-serif; font-size: 0.75rem; letter-spacing: 0.4em; color: #94a3b8; text-transform: uppercase; text-align: center; }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .progress-ring__circle { transition: stroke-dashoffset 0.8s ease-in-out; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body>
@@ -32,7 +37,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCLn0SOd7xvuQ5Zd9IKsR71ugCw96m6Gsw",
@@ -46,9 +51,8 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
-const ADMIN_PASS = "Henly0402"; // 管理者パスワード
 window.wordData = [
-{id:1, en:"agree", ja:"賛成する"},
+    {id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2050,44 +2054,33 @@ window.wordData = [
 {id:2000, en:"whereas", ja:"～だが一方"},
 ];
 
-let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null };
+let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null, rangeKey: "" };
 const root = document.getElementById('app');
 
-window.nav = (v, type = null) => { 
-    state.view = v; 
-    if (type) state.quizType = type; 
-    render(); 
+const getRankData = (score) => {
+    if (score >= 20) return { label: 'S', class: 'rank-S', order: 5 };
+    if (score >= 18) return { label: 'A', class: 'rank-A', order: 4 };
+    if (score >= 15) return { label: 'B', class: 'rank-B', order: 3 };
+    if (score >= 10) return { label: 'C', class: 'rank-C', order: 2 };
+    return { label: 'D', class: 'rank-D', order: 1 };
 };
 
-// 管理者ログイン
-window.adminLogin = () => {
-    const p = prompt("ADMIN PASSを入力してください");
-    if (p === ADMIN_PASS) {
-        window.nav('admin');
-    } else if (p !== null) {
-        alert("パスワードが正しくありません");
-    }
+const getRankClass = (label) => {
+    return label === 'S' ? 'rank-S' : label === 'A' ? 'rank-A' : label === 'B' ? 'rank-B' : label === 'C' ? 'rank-C' : 'rank-D';
 };
+
+window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
+window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === "Henly0402") window.nav('admin'); };
 
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
-    if (u) { state.currentUser = u; window.nav('home'); } else { alert("IDまたはPasswordが違います"); }
-};
-
-window.addUser = async () => {
-    const id = document.getElementById('newID').value;
-    const pw = document.getElementById('newPW').value;
-    if(!id || !pw) return alert("空欄があります");
-    const newUser = { id, pass: pw, progress: 0 };
-    await setDoc(doc(db, "users", id), newUser);
-    state.users.push(newUser);
-    alert("ユーザーを追加しました");
-    render();
+    if (u) { state.currentUser = u; window.nav('home'); } else { alert("ID/PW Error"); }
 };
 
 window.startQuiz = (min, max) => {
+    state.rangeKey = `${state.quizType}_${min}_${max}`;
     const pool = window.wordData.filter(w => w.id >= min && w.id <= max);
     const count = Math.min(pool.length, 20);
     const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
@@ -2127,8 +2120,24 @@ window.checkAns = async (idx) => {
     });
     setTimeout(() => {
         if (state.quiz.curr < state.quiz.questions.length - 1) { state.quiz.curr++; render(); } 
-        else { window.nav('result'); }
+        else { finalizeQuiz(); }
     }, 800);
+};
+
+const finalizeQuiz = async () => {
+    if (state.quizType !== 'Master' && state.currentUser) {
+        const currentRank = getRankData(state.quiz.score);
+        if (!state.currentUser.bestRanks) state.currentUser.bestRanks = {};
+        
+        const prevRankLabel = state.currentUser.bestRanks[state.rangeKey] || 'D';
+        const prevRankOrder = getRankData(prevRankLabel === 'S' ? 20 : prevRankLabel === 'A' ? 18 : prevRankLabel === 'B' ? 15 : prevRankLabel === 'C' ? 10 : 0).order;
+
+        if (currentRank.order > prevRankOrder) {
+            state.currentUser.bestRanks[state.rangeKey] = currentRank.label;
+            await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
+        }
+    }
+    window.nav('result');
 };
 
 function render() {
@@ -2138,7 +2147,7 @@ function render() {
         root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in">
             <div class="flex-1 flex flex-col justify-center">
                 <div class="glass-card p-10 text-center">
-                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin Access</button>
+                    <button onclick="window.adminLogin()" class="mb-4 text-[10px] text-sky-200 font-bold uppercase tracking-widest">Admin</button>
                     <h1 class="text-5xl font-black text-sky-500 mb-6 italic" style="font-family:'Outfit'">LEAP</h1>
                     <div class="space-y-4">
                         <input id="uID" type="text" placeholder="ID" class="w-full p-4 bg-sky-50 rounded-2xl outline-none border border-sky-100">
@@ -2183,7 +2192,15 @@ function render() {
             let btns = "";
             let step = (state.quizType === 'Basic') ? 100 : 400;
             for (let i = 1; i <= 2000; i += step) {
-                btns += `<button onclick="window.startQuiz(${i}, ${i+step-1})" class="w-full p-6 glass-card mb-4 font-bold text-slate-600 border-l-4 border-sky-300 text-left px-8">${i} — ${i+step-1}</button>`;
+                const key = `${state.quizType}_${i}_${i+step-1}`;
+                const best = (state.currentUser.bestRanks && state.currentUser.bestRanks[key]) ? state.currentUser.bestRanks[key] : '-';
+                const rClass = getRankClass(best);
+                
+                btns += `
+                <button onclick="window.startQuiz(${i}, ${i+step-1})" class="w-full p-5 glass-card mb-4 flex justify-between items-center border-l-4 border-sky-300 px-6">
+                    <span class="font-bold text-slate-600">${i} — ${i+step-1}</span>
+                    <span class="rank-badge ${rClass}">${best}</span>
+                </button>`;
             }
             root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-hidden"><h2 class="text-2xl font-black mb-6 text-slate-700 uppercase tracking-widest">${state.quizType}</h2><div class="flex-1 overflow-y-auto scrollbar-hide">${btns}</div><button onclick="window.nav('home')" class="py-6 text-sky-400 font-bold text-center">BACK</button></div>`;
         }
@@ -2197,38 +2214,15 @@ function render() {
         </div>`;
     } 
     else if (state.view === 'result') {
-        const score = state.quiz.score;
-        let rankLabel = 'D', rankClass = 'rank-D';
-        if (score >= 20) { rankLabel = 'S'; rankClass = 'rank-S'; }
-        else if (score >= 18) { rankLabel = 'A'; rankClass = 'rank-A'; }
-        else if (score >= 15) { rankLabel = 'B'; rankClass = 'rank-B'; }
-        else if (score >= 10) { rankLabel = 'C'; rankClass = 'rank-C'; }
-
+        const rank = getRankData(state.quiz.score);
         root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-8 fade-in text-center">
             <div class="glass-card w-full py-12 px-6">
                 <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-4">Quiz Result</div>
-                <div class="text-9xl font-black ${rankClass} mb-2 leading-none" style="font-family:'Outfit'">${rankLabel}</div>
-                <div class="text-2xl font-bold text-slate-500 mb-10">${score} / 20</div>
+                <div class="text-9xl font-black ${rank.class} mb-2 leading-none" style="font-family:'Outfit'">${rank.label}</div>
+                <div class="text-2xl font-bold text-slate-500 mb-10">${state.quiz.score} / 20</div>
                 <button onclick="window.nav('home')" class="w-full py-4 btn-primary rounded-2xl font-black tracking-widest uppercase">Continue</button>
             </div>
             ${footer}
-        </div>`;
-    }
-    else if (state.view === 'admin') {
-        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto">
-            <h2 class="text-2xl font-bold mb-6 text-sky-600">Admin Panel</h2>
-            <div class="glass-card p-6 mb-6 space-y-4">
-                <input id="newID" type="text" placeholder="New ID" class="w-full p-3 bg-sky-50 rounded-xl outline-none">
-                <input id="newPW" type="text" placeholder="New Pass" class="w-full p-3 bg-sky-50 rounded-xl outline-none">
-                <button onclick="window.addUser()" class="w-full py-3 btn-primary rounded-xl font-bold">Add User</button>
-            </div>
-            <div class="space-y-2">
-                ${state.users.map(u => `<div class="p-4 glass-card flex justify-between items-center text-sm">
-                    <span class="font-bold">${u.id}</span>
-                    <span class="text-sky-500">${u.progress || 0} words</span>
-                </div>`).join('')}
-            </div>
-            <button onclick="window.nav('login')" class="py-10 text-sky-400 font-bold text-center w-full">EXIT</button>
         </div>`;
     }
 }
