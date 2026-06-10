@@ -29,7 +29,6 @@
         
         .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
-        /* 特殊演出用の星くずアニメーションCSS */
         @keyframes floatGlow {
             0% { transform: translateY(0px) translateX(0px) scale(1); opacity: 0.2; }
             50% { opacity: 0.8; }
@@ -2073,8 +2072,8 @@ let state = {
     messages: [], 
     hasUnread: false, 
     expandedMsgId: null,
-    celebrateCount: 0, // 演出用の数値保持
-    postCelebrateCallback: null // 演出終了後にどこに戻るかの記憶用
+    celebrateCount: 0, 
+    postCelebrateCallback: null 
 };
 const root = document.getElementById('app');
 
@@ -2123,7 +2122,7 @@ window.addNewUser = async () => {
     if (!newId || !newPw) return alert("IDとパスワードを入力してください");
     if (state.users.some(u => u.id === newId)) return alert("そのIDは既に存在します");
 
-    const newUser = { id: newId, pass: newPw, progress: 0, bestRanks: {} };
+    const newUser = { id: newId, pass: newPw, progress: 0, bestRanks: {}, masterSolved: [] };
     try {
         await setDoc(doc(db, "users", newId), newUser);
         state.users.push(newUser);
@@ -2169,7 +2168,6 @@ window.toggleExpandMessage = (id) => {
     if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
 };
 
-// 管理画面用の演出プレビュー関数
 window.previewCelebrate = (count) => {
     state.celebrateCount = count;
     state.postCelebrateCallback = () => { window.nav('admin'); };
@@ -2203,19 +2201,35 @@ window.checkAns = async (idx) => {
     
     if (state.quizType === 'Master' && state.currentUser) {
         let currentProgress = state.currentUser.progress || 0;
+        if (!state.currentUser.masterSolved) state.currentUser.masterSolved = [];
+        
+        const isAlreadySolved = state.currentUser.masterSolved.includes(q.id);
+
         if (ok) { 
             state.quiz.score++; 
-            currentProgress = Math.min(2000, currentProgress + 1); 
-            // 100の倍数かつ、0より大きい場合にフラグを立てる
-            if (currentProgress > 0 && currentProgress % 100 === 0) {
-                triggerCelebration = true;
-                targetCount = currentProgress;
+            if (!isAlreadySolved) {
+                // 初めて正解した単語の場合のみ進捗+1、配列に記憶
+                currentProgress = Math.min(2000, currentProgress + 1);
+                state.currentUser.masterSolved.push(q.id);
+                
+                // 100の倍数演出チェック
+                if (currentProgress > 0 && currentProgress % 100 === 0) {
+                    triggerCelebration = true;
+                    targetCount = currentProgress;
+                }
             }
+            // すでに正解している単語にまた正解した場合は「変化無し」
         } 
         else { 
-            currentProgress = Math.max(0, currentProgress - 1); 
             state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); 
+            if (isAlreadySolved) {
+                // すでに正解リストにいた単語を間違えた場合のみ進捗-1、リストから削除
+                currentProgress = Math.max(0, currentProgress - 1);
+                state.currentUser.masterSolved = state.currentUser.masterSolved.filter(id => id !== q.id);
+            }
+            // 未正解だった単語をさらに間違えた場合は「変化無し」
         }
+        
         state.currentUser.progress = currentProgress;
         await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
     } else {
@@ -2363,7 +2377,6 @@ function render() {
         </div>`;
     } 
     else if (state.view === 'celebrate') {
-        // キラキラ動く青い光のパーティクル要素をランダム配置で生成
         let particles = "";
         for(let i=0; i<30; i++) {
             const size = Math.random() * 40 + 10;
