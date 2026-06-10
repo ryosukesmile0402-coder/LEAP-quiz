@@ -51,7 +51,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 window.wordData = [
-   {id:1, en:"agree", ja:"賛成する"},
+    {id:1, en:"agree", ja:"賛成する"},
 {id:2, en:"oppose", ja:"～に反対する"},
 {id:3, en:"advise", ja:"～に忠告する"},
 {id:4, en:"tip", ja:"助言"},
@@ -2089,7 +2089,6 @@ window.login = () => {
     if (u) { state.currentUser = u; window.nav('home'); } else { alert("ID/PW Error"); }
 };
 
-// 管理者用：新規ユーザー追加
 window.addNewUser = async () => {
     const newId = document.getElementById('newID').value.trim();
     const newPw = document.getElementById('newPW').value.trim();
@@ -2104,12 +2103,7 @@ window.addNewUser = async () => {
         return;
     }
 
-    const newUser = {
-        id: newId,
-        pass: newPw,
-        progress: 0,
-        bestRanks: {}
-    };
+    const newUser = { id: newId, pass: newPw, progress: 0, bestRanks: {} };
 
     try {
         await setDoc(doc(db, "users", newId), newUser);
@@ -2135,7 +2129,7 @@ window.startQuiz = (min, max) => {
             }
             return { id: item.id, en: item.en, ja: item.ja, opts: choices.sort(() => Math.random() - 0.5) };
         }),
-        curr: 0, score: 0
+        curr: 0, score: 0, wrongWords: [] // 間違えた単語を記録する配列を追加
     };
     window.nav('quiz');
 };
@@ -2147,11 +2141,18 @@ window.checkAns = async (idx) => {
     if (state.quizType === 'Master' && state.currentUser) {
         let currentProgress = state.currentUser.progress || 0;
         if (ok) { state.quiz.score++; currentProgress = Math.min(2000, currentProgress + 1); } 
-        else { currentProgress = Math.max(0, currentProgress - 1); }
+        else { 
+            currentProgress = Math.max(0, currentProgress - 1); 
+            state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); // 間違えた単語を記録
+        }
         state.currentUser.progress = currentProgress;
         await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
-    } else if (ok) {
-        state.quiz.score++;
+    } else {
+        if (ok) {
+            state.quiz.score++;
+        } else {
+            state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); // 間違えた単語を記録
+        }
     }
 
     const btns = document.querySelectorAll('.choice-btn');
@@ -2254,12 +2255,38 @@ function render() {
     } 
     else if (state.view === 'result') {
         const label = getRankLabel(state.quiz.score);
-        root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-8 fade-in text-center">
-            <div class="glass-card w-full py-12 px-6">
-                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-4">Quiz Result</div>
-                <div class="text-9xl font-black ${getRankClass(label)} mb-2 leading-none" style="font-family:'Outfit'">${label}</div>
-                <div class="text-2xl font-bold text-slate-500 mb-10">${state.quiz.score} / 20</div>
-                <button onclick="window.nav('home')" class="w-full py-4 btn-primary rounded-2xl font-black tracking-widest uppercase">Continue</button>
+        
+        // 間違えた単語リストのHTMLを生成
+        let reviewHtml = "";
+        if (state.quiz.wrongWords.length > 0) {
+            reviewHtml = `
+            <div class="mt-6 text-left w-full">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Review (間違えた単語)</h3>
+                <div class="max-h-40 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
+                    ${state.quiz.wrongWords.map(w => `
+                        <div class="flex justify-between items-center bg-red-50/50 border border-red-100/50 p-3 rounded-xl text-sm">
+                            <span class="font-bold text-slate-700" style="font-family:'Outfit'">${w.en}</span>
+                            <span class="text-xs text-red-600 font-medium">${w.ja}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        } else {
+            reviewHtml = `
+            <div class="mt-6 p-4 bg-green-50/50 border border-green-100 rounded-xl text-sm text-green-600 font-bold tracking-wider animate-bounce">
+                Perfect! 🎉 全問正解です！
+            </div>`;
+        }
+
+        root.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-6 fade-in text-center overflow-hidden">
+            <div class="glass-card w-full py-8 px-6 max-h-[85dvh] flex flex-col justify-between overflow-hidden">
+                <div class="overflow-y-auto scrollbar-hide flex-1 flex flex-col items-center">
+                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-2">Quiz Result</div>
+                    <div class="text-[8rem] font-black ${getRankClass(label)} leading-none mb-2" style="font-family:'Outfit'">${label}</div>
+                    <div class="text-xl font-bold text-slate-500 mb-4">${state.quiz.score} / ${state.quiz.questions.length}</div>
+                    ${reviewHtml}
+                </div>
+                <button onclick="window.nav('home')" class="w-full py-4 btn-primary rounded-2xl font-black tracking-widest uppercase mt-6 shrink-0">Continue</button>
             </div>
             ${footer}
         </div>`;
