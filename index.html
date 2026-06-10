@@ -2103,13 +2103,23 @@ const getRankOrder = (label) => {
 window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
 window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === "Henly0402") window.nav('admin'); };
 
+// ログイン時の未読バッジ判定を端末の保存状況（localStorage）と同期
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
     if (u) { 
         state.currentUser = u; 
-        state.hasUnread = state.messages.length > 0;
+        
+        // 過去ログアウトしていても、最新メッセージのIDが既読として残っていなければ赤丸をつける
+        if (state.messages.length > 0) {
+            const latestMsgId = state.messages[0].id;
+            const lastReadId = localStorage.getItem(`lastReadMsgId_${state.currentUser.id}`);
+            state.hasUnread = (latestMsgId !== lastReadId);
+        } else {
+            state.hasUnread = false;
+        }
+
         window.nav('home'); 
     } else { 
         alert("ID/PW Error"); 
@@ -2147,13 +2157,21 @@ window.sendAdminMessage = async () => {
     } catch (e) { alert("送信エラー: " + e.message); }
 };
 
+// メールボックスを開いたときに既読情報を端末に永続保存する処理を追加
 window.toggleMailBox = () => {
     const modal = document.getElementById('mailModal');
     if (modal) {
         modal.classList.toggle('hidden');
         modal.classList.toggle('flex');
+        
         if (modal.classList.contains('flex')) {
             state.hasUnread = false;
+            
+            // メッセージが存在する場合、最新のメッセージIDをユーザー固有の既読キーとして保存
+            if (state.messages.length > 0 && state.currentUser) {
+                localStorage.setItem(`lastReadMsgId_${state.currentUser.id}`, state.messages[0].id);
+            }
+            
             render();
             const updatedModal = document.getElementById('mailModal');
             if (updatedModal) { updatedModal.classList.remove('hidden'); updatedModal.classList.add('flex'); }
@@ -2208,26 +2226,20 @@ window.checkAns = async (idx) => {
         if (ok) { 
             state.quiz.score++; 
             if (!isAlreadySolved) {
-                // 初めて正解した単語の場合のみ進捗+1、配列に記憶
                 currentProgress = Math.min(2000, currentProgress + 1);
                 state.currentUser.masterSolved.push(q.id);
-                
-                // 100の倍数演出チェック
                 if (currentProgress > 0 && currentProgress % 100 === 0) {
                     triggerCelebration = true;
                     targetCount = currentProgress;
                 }
             }
-            // すでに正解している単語にまた正解した場合は「変化無し」
         } 
         else { 
             state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); 
             if (isAlreadySolved) {
-                // すでに正解リストにいた単語を間違えた場合のみ進捗-1、リストから削除
                 currentProgress = Math.max(0, currentProgress - 1);
                 state.currentUser.masterSolved = state.currentUser.masterSolved.filter(id => id !== q.id);
             }
-            // 未正解だった単語をさらに間違えた場合は「変化無し」
         }
         
         state.currentUser.progress = currentProgress;
