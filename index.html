@@ -26,6 +26,9 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .progress-ring__circle { transition: stroke-dashoffset 0.8s ease-in-out; transform: rotate(-90deg); transform-origin: 50% 50%; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
+        
+        /* 3行制限のためのCSS（折りたたみ用） */
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
 </head>
 <body>
@@ -2053,7 +2056,17 @@ window.wordData = [
 {id:2000, en:"whereas", ja:"～だが一方"},
 ];
 
-let state = { view: 'login', currentUser: null, users: [], quiz: null, quizType: null, rangeKey: "", adminMsg: "特にお知らせはありません。" };
+let state = { 
+    view: 'login', 
+    currentUser: null, 
+    users: [], 
+    quiz: null, 
+    quizType: null, 
+    rangeKey: "", 
+    messages: [],     // 過去メッセージを入れる配列に変更
+    hasUnread: false, // 未読バッジ判定
+    expandedMsgId: null // 展開されているメッセージのIDを追跡
+};
 const root = document.getElementById('app');
 
 const getRankLabel = (score) => {
@@ -2086,7 +2099,13 @@ window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
     const u = state.users.find(x => x.id === id && x.pass === pw);
-    if (u) { state.currentUser = u; window.nav('home'); } else { alert("ID/PW Error"); }
+    if (u) { 
+        state.currentUser = u; 
+        state.hasUnread = state.messages.length > 0; // ログイン時、メッセージがあれば通知点灯
+        window.nav('home'); 
+    } else { 
+        alert("ID/PW Error"); 
+    }
 };
 
 window.addNewUser = async () => {
@@ -2104,25 +2123,48 @@ window.addNewUser = async () => {
     } catch (e) { alert("エラー: " + e.message); }
 };
 
-// 管理者用：メッセージ送信機能
+// 管理者用：個別タイムスタンプで新規メッセージを追加保存
 window.sendAdminMessage = async () => {
     const msg = document.getElementById('adminMsgInput').value.trim();
     if (!msg) return alert("メッセージを入力してください");
+    
+    const msgId = "msg_" + Date.now();
+    const newMsgObj = { id: msgId, text: msg, updatedAt: Date.now() };
+    
     try {
-        await setDoc(doc(db, "announcements", "global"), { text: msg, updatedAt: Date.now() });
-        state.adminMsg = msg;
-        alert("メッセージを更新しました！");
+        await setDoc(doc(db, "announcements", msgId), newMsgObj);
+        state.messages.unshift(newMsgObj); // 先頭に追加
+        alert("メッセージを配信しました！");
+        document.getElementById('adminMsgInput').value = "";
         render();
     } catch (e) { alert("送信エラー: " + e.message); }
 };
 
-// ユーザー用：メール表示トグル
+// ユーザー用：メール表示トグル ＋ 既読判定処理
 window.toggleMailBox = () => {
     const modal = document.getElementById('mailModal');
     if (modal) {
         modal.classList.toggle('hidden');
         modal.classList.toggle('flex');
+        
+        // メッセージボックスを開いたら赤い通知バッジを消す
+        if (modal.classList.contains('flex')) {
+            state.hasUnread = false;
+            render(); // バッジを消すために部分再レンダリングを反映
+            // モーダルを再度表示状態に維持する
+            const updatedModal = document.getElementById('mailModal');
+            if (updatedModal) { updatedModal.classList.remove('hidden'); updatedModal.classList.add('flex'); }
+        }
     }
+};
+
+// メッセージ個別タップ時の展開/折りたたみトグル
+window.toggleExpandMessage = (id) => {
+    state.expandedMsgId = state.expandedMsgId === id ? null : id;
+    render();
+    // モーダルの表示状態を維持
+    const modal = document.getElementById('mailModal');
+    if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
 };
 
 window.startQuiz = (min, max) => {
@@ -2204,14 +2246,13 @@ function render() {
         </div>`;
     } 
     else if (state.view === 'home') {
-        const hasMsg = state.adminMsg && state.adminMsg !== "特にお知らせはありません。";
-        root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in relative relative">
+        root.innerHTML = `<div class="flex-1 flex flex-col justify-between p-8 fade-in relative">
             <div class="flex-1 flex flex-col pt-10">
                 <div class="flex items-center justify-center gap-3 mb-10">
                     <h2 class="text-3xl font-black text-slate-700 tracking-tight">${state.currentUser.id}</h2>
                     <button onclick="window.toggleMailBox()" class="relative p-2 bg-white rounded-full shadow-sm border border-sky-100 text-xl hover:scale-105 transition-transform">
                         ✉️
-                        ${hasMsg ? `<span class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>` : ''}
+                        ${state.hasUnread ? `<span class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>` : ''}
                     </button>
                 </div>
 
@@ -2225,10 +2266,29 @@ function render() {
             ${footer}
 
             <div id="mailModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 items-center justify-center p-6 fade-in">
-                <div class="glass-card w-full p-6 text-center max-w-sm">
-                    <div class="text-2xl mb-2">運営からのメッセージ ✉️</div>
-                    <div class="bg-sky-50/50 border border-sky-100 rounded-2xl p-4 text-left text-sm text-slate-600 max-h-60 overflow-y-auto font-medium leading-relaxed whitespace-pre-wrap">${state.adminMsg}</div>
-                    <button onclick="window.toggleMailBox()" class="mt-6 w-full py-3 btn-primary rounded-xl font-bold">閉じる</button>
+                <div class="glass-card w-full p-6 text-center max-w-sm flex flex-col max-h-[80dvh]">
+                    <div class="text-xl font-black text-slate-700 mb-4">メッセージボックス ✉️</div>
+                    
+                    <div class="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-hide text-left">
+                        ${state.messages.length === 0 ? `
+                            <div class="text-center text-sm text-slate-400 py-8">メッセージはありません。</div>
+                        ` : state.messages.map(m => {
+                            const isExpanded = state.expandedMsgId === m.id;
+                            const dateStr = new Date(m.updatedAt).toLocaleDateString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                            return `
+                            <div onclick="window.toggleExpandMessage('${m.id}')" class="bg-white hover:bg-sky-50/40 border border-sky-100 rounded-2xl p-4 cursor-pointer transition-colors shadow-sm">
+                                <div class="text-[10px] text-sky-400 font-bold mb-1">${dateStr}</div>
+                                <div class="text-sm text-slate-600 font-medium leading-relaxed whitespace-pre-wrap ${isExpanded ? '' : 'line-clamp-3'}">
+                                    ${m.text}
+                                </div>
+                                ${!isExpanded && m.text.split('\n').length > 3 || (!isExpanded && m.text.length > 60) ? `
+                                    <div class="text-[10px] text-slate-300 text-right mt-1 font-bold tracking-widest">TAP TO READ ALL ▶</div>
+                                ` : ''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    
+                    <button onclick="window.toggleMailBox()" class="mt-4 w-full py-3 btn-primary rounded-xl font-bold shrink-0">閉じる</button>
                 </div>
             </div>
         </div>`;
@@ -2308,8 +2368,8 @@ function render() {
             <div class="glass-card p-6 mb-6 border-2 border-amber-100 bg-amber-50/10 shadow-none">
                 <h3 class="text-sm font-bold text-amber-500 uppercase tracking-widest mb-3">Broadcast Message</h3>
                 <div class="space-y-3">
-                    <textarea id="adminMsgInput" placeholder="全ユーザーへ送る連絡メッセージを入力..." class="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-amber-300 text-sm h-24 resize-none">${state.adminMsg === "特にお知らせはありません。" ? "" : state.adminMsg}</textarea>
-                    <button onclick="window.sendAdminMessage()" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-400 text-white font-bold rounded-2xl shadow-lg shadow-amber-100 text-sm">UPDATE MESSAGE</button>
+                    <textarea id="adminMsgInput" placeholder="全ユーザーへ送る連絡メッセージを入力..." class="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-amber-300 text-sm h-24 resize-none"></textarea>
+                    <button onclick="window.sendAdminMessage()" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-400 text-white font-bold rounded-2xl shadow-lg shadow-amber-100 text-sm">BROADCAST NEW MESSAGE</button>
                 </div>
             </div>
 
@@ -2351,17 +2411,15 @@ const startApp = () => {
 (async () => {
     const startTime = Date.now();
     try {
-        // ユーザー一覧の取得
         const snap = await getDocs(collection(db, "users"));
         state.users = snap.docs.map(d => d.data());
 
-        // 運営メッセージ（お知らせ）の取得を追加
+        // メッセージコレクション全体を最新順にまとめて取得
         const announcementsSnap = await getDocs(collection(db, "announcements"));
-        announcementsSnap.forEach(doc => {
-            if (doc.id === "global") {
-                state.adminMsg = doc.data().text || "特にお知らせはありません。";
-            }
-        });
+        let msgs = [];
+        announcementsSnap.forEach(d => { msgs.push(d.data()); });
+        // 日付（降順：新しい順）で並び替え、最大20件保持
+        state.messages = msgs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 20);
     } catch (e) { console.error(e); }
     const remaining = Math.max(0, 3000 - (Date.now() - startTime));
     setTimeout(startApp, remaining);
