@@ -2073,7 +2073,9 @@ let state = {
     hasUnread: false, 
     expandedMsgId: null,
     celebrateCount: 0, 
-    postCelebrateCallback: null 
+    postCelebrateCallback: null,
+    triggerCelebrationAtEnd: false, // 結果画面で演出を入れるフラグ
+    targetCelebrationCount: 0       // 達成単語数
 };
 const root = document.getElementById('app');
 
@@ -2183,7 +2185,6 @@ window.previewCelebrate = (count) => {
     window.nav('celebrate');
 };
 
-// 演出画面から元に戻るための共通実行関数
 window.closeCelebrateView = () => {
     if (state.postCelebrateCallback) {
         state.postCelebrateCallback();
@@ -2192,6 +2193,8 @@ window.closeCelebrateView = () => {
 
 window.startQuiz = (min, max) => {
     state.rangeKey = `${state.quizType}_${min}_${max}`;
+    state.triggerCelebrationAtEnd = false; // フラグ初期化
+    state.targetCelebrationCount = 0;
     const pool = window.wordData.filter(w => w.id >= min && w.id <= max);
     const count = Math.min(pool.length, 20);
     const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
@@ -2212,8 +2215,6 @@ window.startQuiz = (min, max) => {
 window.checkAns = async (idx) => {
     const q = state.quiz.questions[state.quiz.curr];
     const ok = (q.opts[idx] === q.ja);
-    let triggerCelebration = false;
-    let targetCount = 0;
     
     if (state.quizType === 'Master' && state.currentUser) {
         let currentProgress = state.currentUser.progress || 0;
@@ -2226,9 +2227,10 @@ window.checkAns = async (idx) => {
             if (!isAlreadySolved) {
                 currentProgress = Math.min(2000, currentProgress + 1);
                 state.currentUser.masterSolved.push(q.id);
+                // テスト中ではなく、100の倍数達成フラグだけをここで記録しておく
                 if (currentProgress > 0 && currentProgress % 100 === 0) {
-                    triggerCelebration = true;
-                    targetCount = currentProgress;
+                    state.triggerCelebrationAtEnd = true;
+                    state.targetCelebrationCount = currentProgress;
                 }
             }
         } 
@@ -2255,17 +2257,11 @@ window.checkAns = async (idx) => {
     });
 
     setTimeout(() => {
-        const nextStep = () => {
-            if (state.quiz.curr < state.quiz.questions.length - 1) { state.quiz.curr++; render(); } 
-            else { finalizeQuiz(); }
-        };
-
-        if (triggerCelebration) {
-            state.celebrateCount = targetCount;
-            state.postCelebrateCallback = nextStep;
-            window.nav('celebrate');
-        } else {
-            nextStep();
+        if (state.quiz.curr < state.quiz.questions.length - 1) { 
+            state.quiz.curr++; 
+            render(); 
+        } else { 
+            finalizeQuiz(); 
         }
     }, 800);
 };
@@ -2280,6 +2276,7 @@ const finalizeQuiz = async () => {
             await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
         }
     }
+    // 結果画面へ遷移
     window.nav('result');
 };
 
@@ -2409,6 +2406,15 @@ function render() {
         </div>`;
     }
     else if (state.view === 'result') {
+        // 結果画面がレンダリングされる際、もし100の倍数フラグが立っていたら演出へ即座にリダイレクト
+        if (state.triggerCelebrationAtEnd) {
+            state.triggerCelebrationAtEnd = false; // ループ防止で即座に解除
+            state.celebrateCount = state.targetCelebrationCount;
+            state.postCelebrateCallback = () => { window.nav('result'); }; // 演出タップ後は結果画面へ戻る
+            setTimeout(() => { window.nav('celebrate'); }, 100);
+            return;
+        }
+
         const label = getRankLabel(state.quiz.score);
         let reviewHtml = "";
         if (state.quiz.wrongWords.length > 0) {
