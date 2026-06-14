@@ -2074,8 +2074,9 @@ let state = {
     expandedMsgId: null,
     celebrateCount: 0, 
     postCelebrateCallback: null,
-    triggerCelebrationAtEnd: false, // 結果画面で演出を入れるフラグ
-    targetCelebrationCount: 0       // 達成単語数
+    triggerCelebrationAtEnd: false,
+    targetCelebrationCount: 0,
+    selectedAdminUserId: null 
 };
 const root = document.getElementById('app');
 
@@ -2104,6 +2105,11 @@ const getRankOrder = (label) => {
 
 window.nav = (v, type = null) => { state.view = v; if (type) state.quizType = type; render(); };
 window.adminLogin = () => { const p = prompt("ADMIN PASS"); if (p === "Henly0402") window.nav('admin'); };
+
+window.viewAdminUserDetail = (userId) => {
+    state.selectedAdminUserId = userId;
+    window.nav('admin_user_detail');
+};
 
 window.login = () => {
     const id = document.getElementById('uID').value;
@@ -2193,7 +2199,7 @@ window.closeCelebrateView = () => {
 
 window.startQuiz = (min, max) => {
     state.rangeKey = `${state.quizType}_${min}_${max}`;
-    state.triggerCelebrationAtEnd = false; // フラグ初期化
+    state.triggerCelebrationAtEnd = false;
     state.targetCelebrationCount = 0;
     const pool = window.wordData.filter(w => w.id >= min && w.id <= max);
     const count = Math.min(pool.length, 20);
@@ -2227,7 +2233,6 @@ window.checkAns = async (idx) => {
             if (!isAlreadySolved) {
                 currentProgress = Math.min(2000, currentProgress + 1);
                 state.currentUser.masterSolved.push(q.id);
-                // テスト中ではなく、100の倍数達成フラグだけをここで記録しておく
                 if (currentProgress > 0 && currentProgress % 100 === 0) {
                     state.triggerCelebrationAtEnd = true;
                     state.targetCelebrationCount = currentProgress;
@@ -2276,7 +2281,6 @@ const finalizeQuiz = async () => {
             await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
         }
     }
-    // 結果画面へ遷移
     window.nav('result');
 };
 
@@ -2406,11 +2410,10 @@ function render() {
         </div>`;
     }
     else if (state.view === 'result') {
-        // 結果画面がレンダリングされる際、もし100の倍数フラグが立っていたら演出へ即座にリダイレクト
         if (state.triggerCelebrationAtEnd) {
-            state.triggerCelebrationAtEnd = false; // ループ防止で即座に解除
+            state.triggerCelebrationAtEnd = false; 
             state.celebrateCount = state.targetCelebrationCount;
-            state.postCelebrateCallback = () => { window.nav('result'); }; // 演出タップ後は結果画面へ戻る
+            state.postCelebrateCallback = () => { window.nav('result'); }; 
             setTimeout(() => { window.nav('celebrate'); }, 100);
             return;
         }
@@ -2466,19 +2469,26 @@ function render() {
             </div>
 
             <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 px-2">User Progress List</h3>
+            <p class="text-[11px] text-slate-400 -mt-2 mb-3 px-2">ユーザー名をタップすると、各範囲のランク等の詳細データが確認できます。</p>
             <div class="space-y-3 mb-8">
-                ${state.users.sort((a,b) => (b.progress||0)-(a.progress||0)).map(u => `
-                    <div class="p-5 glass-card flex justify-between items-center shadow-none border border-slate-100">
+                ${state.users.sort((a,b) => {
+                    const countA = a.masterSolved ? a.masterSolved.length : 0;
+                    const countB = b.masterSolved ? b.masterSolved.length : 0;
+                    return countB - countA;
+                }).map(u => {
+                    const solvedCount = u.masterSolved ? u.masterSolved.length : 0;
+                    return `
+                    <div onclick="window.viewAdminUserDetail('${u.id}')" class="p-5 glass-card flex justify-between items-center shadow-none border border-slate-100 cursor-pointer hover:bg-sky-50/30 transition-colors">
                         <div>
-                            <div class="font-black text-slate-700 text-lg">${u.id}</div>
+                            <div class="font-black text-slate-700 text-lg hover:text-sky-500">${u.id} ➔</div>
                             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Pass: ${u.pass}</div>
                         </div>
                         <div class="text-right">
-                            <div class="text-sky-500 font-black text-2xl">${u.progress || 0}</div>
+                            <div class="text-sky-500 font-black text-2xl">${solvedCount}</div>
                             <div class="text-[9px] text-slate-300 font-bold uppercase">Words</div>
                         </div>
-                    </div>
-                `).join('')}
+                    </div>`;
+                }).join('')}
             </div>
 
             <div class="glass-card p-6 mb-4 border-2 border-slate-100 bg-slate-50/50 shadow-none">
@@ -2493,6 +2503,75 @@ function render() {
             </div>
 
             <button onclick="window.nav('login')" class="py-10 text-slate-300 font-bold text-center w-full uppercase text-xs tracking-[0.3em]">Exit Admin Mode</button>
+        </div>`;
+    }
+    else if (state.view === 'admin_user_detail') {
+        const targetUser = state.users.find(u => u.id === state.selectedAdminUserId);
+        if (!targetUser) {
+            root.innerHTML = `<div class="p-8 text-center text-slate-400">ユーザーが見つかりません。<button onclick="window.nav('admin')" class="mt-4 text-sky-500 font-bold block mx-auto">戻る</button></div>`;
+            return;
+        }
+
+        // システム内に保存されている実際の正解単語数を取得
+        const dynamicSolvedCount = targetUser.masterSolved ? targetUser.masterSolved.length : 0;
+
+        let basicRanksHtml = "";
+        for (let i = 1; i <= 2000; i += 100) {
+            const key = `Basic_${i}_${i+99}`;
+            const r = (targetUser.bestRanks && targetUser.bestRanks[key]) ? targetUser.bestRanks[key] : '-';
+            basicRanksHtml += `
+            <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+                <span class="text-slate-500 font-medium">${i} — ${i+99}</span>
+                <span class="font-black rank-badge ${getRankClass(r)}">${r}</span>
+            </div>`;
+        }
+
+        let standardRanksHtml = "";
+        for (let i = 1; i <= 2000; i += 400) {
+            const key = `Standard_${i}_${i+399}`;
+            const r = (targetUser.bestRanks && targetUser.bestRanks[key]) ? targetUser.bestRanks[key] : '-';
+            standardRanksHtml += `
+            <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+                <span class="text-slate-500 font-medium">${i} — ${i+399}</span>
+                <span class="font-black rank-badge ${getRankClass(r)}">${r}</span>
+            </div>`;
+        }
+
+        root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-y-auto bg-slate-50">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <span class="text-xs text-sky-500 font-bold uppercase tracking-widest block">User Study Data</span>
+                    <h2 class="text-3xl font-black text-slate-700 tracking-tight">${targetUser.id}</h2>
+                </div>
+                <button onclick="window.nav('admin')" class="px-4 py-2 bg-white text-slate-600 border border-slate-200 font-bold rounded-xl text-xs shadow-sm hover:bg-slate-100">BACK</button>
+            </div>
+
+            <div class="glass-card p-6 mb-6 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-xl shadow-emerald-100">
+                <div class="text-xs font-bold text-emerald-100 uppercase tracking-widest mb-1">Saved Master Solved Count</div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-5xl font-black">${dynamicSolvedCount}</span>
+                    <span class="text-sm font-bold text-emerald-100">/ 2000 WORDS</span>
+                </div>
+                <p class="text-[10px] text-emerald-100/80 mt-2 font-medium">※masterSolved 配列内に保存されている現在のリアルタイムな正解単語数です</p>
+            </div>
+
+            <div class="grid gap-6 md:grid-cols-2 mb-8">
+                <div class="glass-card p-6 bg-white border border-slate-100 shadow-sm flex flex-col h-[400px]">
+                    <h3 class="text-sm font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3">BASIC SECTION RANKS</h3>
+                    <div class="flex-1 overflow-y-auto pr-1 scrollbar-hide">
+                        ${basicRanksHtml}
+                    </div>
+                </div>
+
+                <div class="glass-card p-6 bg-white border border-slate-100 shadow-sm flex flex-col h-[400px]">
+                    <h3 class="text-sm font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3">STANDARD SECTION RANKS</h3>
+                    <div class="flex-1 overflow-y-auto pr-1 scrollbar-hide">
+                        ${standardRanksHtml}
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="window.nav('admin')" class="w-full py-4 bg-slate-800 text-white font-black rounded-2xl text-center shadow-lg transition-transform text-sm tracking-widest uppercase">BACK TO ADMIN</button>
         </div>`;
     }
 }
