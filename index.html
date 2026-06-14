@@ -2111,6 +2111,23 @@ window.viewAdminUserDetail = (userId) => {
     window.nav('admin_user_detail');
 };
 
+// 実際の配列数にprogressを強制同期させる管理者関数
+window.syncUserMasterProgress = async (userId) => {
+    const targetUser = state.users.find(u => u.id === userId);
+    if (!targetUser) return alert("ユーザーデータが見つかりません");
+
+    const realCount = targetUser.masterSolved ? targetUser.masterSolved.length : 0;
+    targetUser.progress = realCount;
+
+    try {
+        await setDoc(doc(db, "users", userId), targetUser);
+        alert(`Firestoreの進行状況(progress)を ${realCount} 語に同期しました！`);
+        render();
+    } catch (e) {
+        alert("同期エラー: " + e.message);
+    }
+};
+
 window.login = () => {
     const id = document.getElementById('uID').value;
     const pw = document.getElementById('uPW').value;
@@ -2512,7 +2529,6 @@ function render() {
             return;
         }
 
-        // システム内に保存されている実際の正解単語数を取得
         const dynamicSolvedCount = targetUser.masterSolved ? targetUser.masterSolved.length : 0;
 
         let basicRanksHtml = "";
@@ -2547,12 +2563,22 @@ function render() {
             </div>
 
             <div class="glass-card p-6 mb-6 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-xl shadow-emerald-100">
-                <div class="text-xs font-bold text-emerald-100 uppercase tracking-widest mb-1">Saved Master Solved Count</div>
-                <div class="flex items-baseline gap-2">
-                    <span class="text-5xl font-black">${dynamicSolvedCount}</span>
-                    <span class="text-sm font-bold text-emerald-100">/ 2000 WORDS</span>
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <div class="text-xs font-bold text-emerald-100 uppercase tracking-widest mb-1">Saved Master Solved Count</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-5xl font-black">${dynamicSolvedCount}</span>
+                            <span class="text-sm font-bold text-emerald-100">/ 2000 WORDS</span>
+                        </div>
+                    </div>
+                    <button onclick="window.syncUserMasterProgress('${targetUser.id}')" class="px-4 py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl text-xs uppercase tracking-wider backdrop-blur-sm transition-all border border-white/20 active:scale-95 shadow-inner">
+                        🔄 Sync Data
+                    </button>
                 </div>
-                <p class="text-[10px] text-emerald-100/80 mt-2 font-medium">※masterSolved 配列内に保存されている現在のリアルタイムな正解単語数です</p>
+                <div class="text-[10px] text-emerald-100/90 mt-3 font-medium leading-relaxed bg-black/10 p-3 rounded-xl border border-white/5">
+                    <p class="font-bold">💡 MASTER PROGRESS同期機能:</p>
+                    ユーザー側のホーム進捗サークル等の数値（progress）を、この保存中単語数（${dynamicSolvedCount}）と完全に強制一致させます。数値のズレを直したい場合に押してください。
+                </div>
             </div>
 
             <div class="grid gap-6 md:grid-cols-2 mb-8">
