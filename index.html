@@ -2222,14 +2222,12 @@ window.startQuiz = (min, max) => {
             }
             return { id: item.id, en: item.en, ja: item.ja, opts: choices.sort(() => Math.random() - 0.5) };
         }),
-        curr: 0, score: 0, wrongWords: []
+        curr: 0, score: 0, wrongWords: [] // 今回のテスト内だけの間違い用。開始時に必ずクリア
     };
     window.nav('quiz');
 };
 
-// 特定の範囲ブロック専用の苦手復習テストを開始する
 window.startRangeWrongWordsQuiz = (e, quizType, min, max) => {
-    // 範囲ボタンの親イベント（通常テストの開始）が発火しないようにする
     e.stopPropagation();
 
     const targetArrayKey = `wrongWordIds_${quizType}_${min}_${max}`;
@@ -2254,7 +2252,7 @@ window.startRangeWrongWordsQuiz = (e, quizType, min, max) => {
             }
             return { id: item.id, en: item.en, ja: item.ja, opts: choices.sort(() => Math.random() - 0.5) };
         }),
-        curr: 0, score: 0, wrongWords: []
+        curr: 0, score: 0, wrongWords: [] // 復習テスト内だけの間違い用。開始時に必ずクリア
     };
     window.nav('quiz');
 };
@@ -2263,9 +2261,11 @@ window.checkAns = async (idx) => {
     const q = state.quiz.questions[state.quiz.curr];
     const ok = (q.opts[idx] === q.ja);
 
+    // 今回の1回のテストのwrongWordsリストに、この単語がすでに格納されているか確認（重複ガード）
+    const isAlreadyInCurrentTestResults = state.quiz.wrongWords.some(w => w.en === q.en);
+
     if (state.quizType.startsWith('Review_')) {
-        // 例: Review_Basic_1_100 から元のセクションと範囲キーを取り出す
-        const parts = state.quizType.split('_'); // ['Review', 'Basic', '1', '100']
+        const parts = state.quizType.split('_'); 
         const section = parts[1];
         const min = parts[2];
         const max = parts[3];
@@ -2273,12 +2273,15 @@ window.checkAns = async (idx) => {
         
         if (ok) {
             state.quiz.score++;
-            // 正解したらその特定の範囲の苦手リストから除外
+            // 克服に成功したら永続保存用（Firestore側）の苦手リストから除外
             if (state.currentUser[targetArrayKey]) {
                 state.currentUser[targetArrayKey] = state.currentUser[targetArrayKey].filter(id => id !== q.id);
             }
         } else {
-            state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+            // 今回のテストの結果画面用のみに追加
+            if (!isAlreadyInCurrentTestResults) {
+                state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+            }
         }
         await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
     } 
@@ -2299,7 +2302,10 @@ window.checkAns = async (idx) => {
             }
         } 
         else { 
-            state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); 
+            // 今回のテストの結果画面用のみに追加
+            if (!isAlreadyInCurrentTestResults) {
+                state.quiz.wrongWords.push({ en: q.en, ja: q.ja }); 
+            }
             if (isAlreadySolved) {
                 currentProgress = Math.max(0, currentProgress - 1);
                 state.currentUser.masterSolved = state.currentUser.masterSolved.filter(id => id !== q.id);
@@ -2309,13 +2315,16 @@ window.checkAns = async (idx) => {
         await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
     } 
     else {
-        // 通常の Basic / Standard のテスト回答時
+        // 通常のセクション別テスト（Basic / Standard）
         if (ok) {
             state.quiz.score++;
         } else {
-            state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+            // 今回のテストの結果画面用のみに追加
+            if (!isAlreadyInCurrentTestResults) {
+                state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+            }
             
-            // 例: wrongWordIds_Basic_1_100 という動的キーで保存
+            // データベースの各範囲ごとの苦手フォルダへの保存処理
             const targetArrayKey = `wrongWordIds_${state.rangeKey}`; 
             if (!state.currentUser[targetArrayKey]) {
                 state.currentUser[targetArrayKey] = [];
@@ -2446,7 +2455,6 @@ function render() {
                 const key = `${state.quizType}_${min}_${max}`;
                 const bestLabel = (state.currentUser.bestRanks && state.currentUser.bestRanks[key]) ? state.currentUser.bestRanks[key] : '-';
                 
-                // 特定範囲の苦手配列キー名を取得して個数をカウント
                 const targetArrayKey = `wrongWordIds_${key}`;
                 const rangeWrongCount = state.currentUser[targetArrayKey] ? state.currentUser[targetArrayKey].length : 0;
 
@@ -2516,7 +2524,7 @@ function render() {
         let reviewHtml = "";
         if (state.quiz.wrongWords.length > 0) {
             reviewHtml = `<div class="mt-6 text-left w-full">
-                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Review (間違えた単語)</h3>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Review (今回間違えた単語)</h3>
                 <div class="max-h-40 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
                     ${state.quiz.wrongWords.map(w => `<div class="flex justify-between items-center bg-red-50/50 border border-red-100/50 p-3 rounded-xl text-sm">
                         <span class="font-bold text-slate-700" style="font-family:'Outfit'">${w.en}</span>
