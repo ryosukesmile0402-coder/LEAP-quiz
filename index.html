@@ -2111,7 +2111,6 @@ window.viewAdminUserDetail = (userId) => {
     window.nav('admin_user_detail');
 };
 
-// 実際の配列数にprogressを強制同期させる管理者関数
 window.syncUserMasterProgress = async (userId) => {
     const targetUser = state.users.find(u => u.id === userId);
     if (!targetUser) return alert("ユーザーデータが見つかりません");
@@ -2134,6 +2133,8 @@ window.login = () => {
     const u = state.users.find(x => x.id === id && x.pass === pw);
     if (u) { 
         state.currentUser = u; 
+        if (!state.currentUser.wrongWordIds_Basic) state.currentUser.wrongWordIds_Basic = [];
+        if (!state.currentUser.wrongWordIds_Standard) state.currentUser.wrongWordIds_Standard = [];
         if (state.messages.length > 0) {
             const latestMsgId = state.messages[0].id;
             const lastReadId = localStorage.getItem(`lastReadMsgId_${state.currentUser.id}`);
@@ -2153,7 +2154,7 @@ window.addNewUser = async () => {
     if (!newId || !newPw) return alert("IDとパスワードを入力してください");
     if (state.users.some(u => u.id === newId)) return alert("そのIDは既に存在します");
 
-    const newUser = { id: newId, pass: newPw, progress: 0, bestRanks: {}, masterSolved: [] };
+    const newUser = { id: newId, pass: newPw, progress: 0, bestRanks: {}, masterSolved: [], wrongWordIds_Basic: [], wrongWordIds_Standard: [] };
     try {
         await setDoc(doc(db, "users", newId), newUser);
         state.users.push(newUser);
@@ -2235,14 +2236,57 @@ window.startQuiz = (min, max) => {
     window.nav('quiz');
 };
 
+// 各セクション専用の苦手復習テストを開始する
+window.startSectionWrongWordsQuiz = (sectionType) => {
+    const targetArrayKey = `wrongWordIds_${sectionType}`;
+    if (!state.currentUser[targetArrayKey] || state.currentUser[targetArrayKey].length === 0) {
+        return alert("このセクションの間違えた問題はありません！");
+    }
+    state.quizType = `Review_${sectionType}`; // 例: Review_Basic or Review_Standard
+    state.rangeKey = `Review_${sectionType}_Mode`;
+    state.triggerCelebrationAtEnd = false;
+
+    const pool = window.wordData.filter(w => state.currentUser[targetArrayKey].includes(w.id));
+    const count = Math.min(pool.length, 10);
+    const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+
+    state.quiz = {
+        questions: selected.map(item => {
+            let choices = [item.ja]; 
+            while (choices.length < 4) {
+                const r = window.wordData[Math.floor(Math.random() * window.wordData.length)].ja;
+                if (!choices.includes(r)) choices.push(r);
+            }
+            return { id: item.id, en: item.en, ja: item.ja, opts: choices.sort(() => Math.random() - 0.5) };
+        }),
+        curr: 0, score: 0, wrongWords: []
+    };
+    window.nav('quiz');
+};
+
 window.checkAns = async (idx) => {
     const q = state.quiz.questions[state.quiz.curr];
     const ok = (q.opts[idx] === q.ja);
     
-    if (state.quizType === 'Master' && state.currentUser) {
+    if (!state.currentUser.wrongWordIds_Basic) state.currentUser.wrongWordIds_Basic = [];
+    if (!state.currentUser.wrongWordIds_Standard) state.currentUser.wrongWordIds_Standard = [];
+
+    if (state.quizType.startsWith('Review_')) {
+        const section = state.quizType.split('_')[1]; // Basic or Standard
+        const targetArrayKey = `wrongWordIds_${section}`;
+        
+        if (ok) {
+            state.quiz.score++;
+            // 復習テストで正解したら、そのセクションの苦手リストから除外
+            state.currentUser[targetArrayKey] = state.currentUser[targetArrayKey].filter(id => id !== q.id);
+        } else {
+            state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+        }
+        await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
+    } 
+    else if (state.quizType === 'Master' && state.currentUser) {
         let currentProgress = state.currentUser.progress || 0;
         if (!state.currentUser.masterSolved) state.currentUser.masterSolved = [];
-        
         const isAlreadySolved = state.currentUser.masterSolved.includes(q.id);
 
         if (ok) { 
@@ -2263,12 +2307,23 @@ window.checkAns = async (idx) => {
                 state.currentUser.masterSolved = state.currentUser.masterSolved.filter(id => id !== q.id);
             }
         }
-        
         state.currentUser.progress = currentProgress;
         await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
-    } else {
-        if (ok) state.quiz.score++;
-        else state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+    } 
+    else {
+        // 通常の Basic または Standard セクション
+        if (ok) {
+            state.quiz.score++;
+        } else {
+            state.quiz.wrongWords.push({ en: q.en, ja: q.ja });
+            const targetArrayKey = `wrongWordIds_${state.quizType}`; // wrongWordIds_Basic or wrongWordIds_Standard
+            if (state.currentUser[targetArrayKey]) {
+                if (!state.currentUser[targetArrayKey].includes(q.id)) {
+                    state.currentUser[targetArrayKey].push(q.id);
+                }
+            }
+        }
+        await setDoc(doc(db, "users", state.currentUser.id), state.currentUser);
     }
 
     const btns = document.querySelectorAll('.choice-btn');
@@ -2289,7 +2344,7 @@ window.checkAns = async (idx) => {
 };
 
 const finalizeQuiz = async () => {
-    if (state.quizType !== 'Master' && state.currentUser) {
+    if (state.quizType !== 'Master' && !state.quizType.startsWith('Review_') && state.currentUser) {
         const currentLabel = getRankLabel(state.quiz.score);
         if (!state.currentUser.bestRanks) state.currentUser.bestRanks = {};
         const prevLabel = state.currentUser.bestRanks[state.rangeKey] || '-';
@@ -2382,6 +2437,10 @@ function render() {
                 <button onclick="window.nav('home')" class="mt-8 text-sky-400 font-bold text-xs">BACK</button>
             </div>`;
         } else {
+            // セクションごとの間違えた問題の登録数を取得
+            const targetArrayKey = `wrongWordIds_${state.quizType}`; // wrongWordIds_Basic or wrongWordIds_Standard
+            const wrongWordsCount = state.currentUser[targetArrayKey] ? state.currentUser[targetArrayKey].length : 0;
+
             let btns = "";
             let step = (state.quizType === 'Basic') ? 100 : 400;
             for (let i = 1; i <= 2000; i += step) {
@@ -2393,7 +2452,20 @@ function render() {
                     <span class="rank-badge ${getRankClass(bestLabel)}">${bestLabel}</span>
                 </button>`;
             }
-            root.innerHTML = `<div class="p-8 flex-1 flex flex-col fade-in overflow-hidden"><h2 class="text-2xl font-black mb-6 text-slate-700 uppercase tracking-widest">${state.quizType}</h2><div class="flex-1 overflow-y-auto scrollbar-hide">${btns}</div><button onclick="window.nav('home')" class="py-6 text-sky-400 font-bold text-center">BACK</button></div>`;
+            root.innerHTML = `
+            <div class="p-8 flex-1 flex flex-col fade-in overflow-hidden">
+                <h2 class="text-2xl font-black mb-4 text-slate-700 uppercase tracking-widest">${state.quizType}</h2>
+                
+                ${wrongWordsCount > 0 ? `
+                <button onclick="window.startSectionWrongWordsQuiz('${state.quizType}')" class="w-full py-4 mb-6 bg-gradient-to-r from-red-500 to-rose-400 text-white font-black rounded-2xl shadow-lg shadow-red-100 flex justify-between items-center px-6 active:scale-95 transition-transform shrink-0">
+                    <span class="text-sm">❌ ${state.quizType} の間違えた問題</span>
+                    <span class="bg-white text-red-500 rounded-full px-3 py-0.5 text-xs font-black shadow-inner">${wrongWordsCount}語</span>
+                </button>
+                ` : ''}
+
+                <div class="flex-1 overflow-y-auto scrollbar-hide">${btns}</div>
+                <button onclick="window.nav('home')" class="py-4 text-sky-400 font-bold text-center shrink-0">BACK</button>
+            </div>`;
         }
     } 
     else if (state.view === 'quiz') {
@@ -2435,7 +2507,8 @@ function render() {
             return;
         }
 
-        const label = getRankLabel(state.quiz.score);
+        const isReview = state.quizType.startsWith('Review_');
+        const label = isReview ? '-' : getRankLabel(state.quiz.score);
         let reviewHtml = "";
         if (state.quiz.wrongWords.length > 0) {
             reviewHtml = `<div class="mt-6 text-left w-full">
@@ -2455,7 +2528,11 @@ function render() {
             <div class="glass-card w-full py-8 px-6 max-h-[85dvh] flex flex-col justify-between overflow-hidden">
                 <div class="overflow-y-auto scrollbar-hide flex-1 flex flex-col items-center">
                     <div class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mb-2">Quiz Result</div>
-                    <div class="text-[8rem] font-black ${getRankClass(label)} leading-none mb-2" style="font-family:'Outfit'">${label}</div>
+                    ${isReview ? `
+                        <div class="text-3xl font-black text-sky-500 my-6" style="font-family:'Outfit'">復習テスト完了</div>
+                    ` : `
+                        <div class="text-[8rem] font-black ${getRankClass(label)} leading-none mb-2" style="font-family:'Outfit'">${label}</div>
+                    `}
                     <div class="text-xl font-bold text-slate-500 mb-4">${state.quiz.score} / ${state.quiz.questions.length}</div>
                     ${reviewHtml}
                 </div>
@@ -2508,17 +2585,6 @@ function render() {
                 }).join('')}
             </div>
 
-            <div class="glass-card p-6 mb-4 border-2 border-slate-100 bg-slate-50/50 shadow-none">
-                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">演出プレビューテスト</h3>
-                <p class="text-[11px] text-slate-400 mb-4 font-medium">100の倍数達成時の画面エフェクトを即座に確認・テストできます。</p>
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="window.previewCelebrate(100)" class="py-3 bg-slate-800 text-sky-400 border border-sky-900/30 font-bold rounded-xl text-xs hover:bg-slate-900">100語達成</button>
-                    <button onclick="window.previewCelebrate(500)" class="py-3 bg-slate-800 text-sky-400 border border-sky-900/30 font-bold rounded-xl text-xs hover:bg-slate-900">500語達成</button>
-                    <button onclick="window.previewCelebrate(1000)" class="py-3 bg-slate-800 text-sky-400 border border-sky-900/30 font-bold rounded-xl text-xs hover:bg-slate-900">1000語達成</button>
-                    <button onclick="window.previewCelebrate(2000)" class="py-3 bg-slate-800 text-sky-400 border border-sky-900/30 font-bold rounded-xl text-xs hover:bg-slate-900">2000語達成</button>
-                </div>
-            </div>
-
             <button onclick="window.nav('login')" class="py-10 text-slate-300 font-bold text-center w-full uppercase text-xs tracking-[0.3em]">Exit Admin Mode</button>
         </div>`;
     }
@@ -2530,6 +2596,8 @@ function render() {
         }
 
         const dynamicSolvedCount = targetUser.masterSolved ? targetUser.masterSolved.length : 0;
+        const bReview = targetUser.wrongWordIds_Basic ? targetUser.wrongWordIds_Basic.length : 0;
+        const sReview = targetUser.wrongWordIds_Standard ? targetUser.wrongWordIds_Standard.length : 0;
 
         let basicRanksHtml = "";
         for (let i = 1; i <= 2000; i += 100) {
@@ -2575,9 +2643,9 @@ function render() {
                         🔄 Sync Data
                     </button>
                 </div>
-                <div class="text-[10px] text-emerald-100/90 mt-3 font-medium leading-relaxed bg-black/10 p-3 rounded-xl border border-white/5">
-                    <p class="font-bold">💡 MASTER PROGRESS同期機能:</p>
-                    ユーザー側のホーム進捗サークル等の数値（progress）を、この保存中単語数（${dynamicSolvedCount}）と完全に強制一致させます。数値のズレを直したい場合に押してください。
+                <div class="text-[10px] text-emerald-100/90 mt-3 font-medium space-y-1 bg-black/10 p-3 rounded-xl border border-white/5">
+                    <div>❌ <span class="font-bold">Basic 苦手数:</span> ${bReview} 語</div>
+                    <div>❌ <span class="font-bold">Standard 苦手数:</span> ${sReview} 語</div>
                 </div>
             </div>
 
